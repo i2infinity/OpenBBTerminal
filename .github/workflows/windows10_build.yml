@@ -1,7 +1,7 @@
 name: Windows10 Build
 env:
   OPENBB_ENABLE_QUICK_EXIT: true
-  OPENBB_LOG_COLLECTION: false
+  OPENBB_LOG_COLLECT: false
   OPENBB_USE_ION: false
   OPENBB_USE_PROMPT_TOOLKIT: false
   PIP_DEFAULT_TIMEOUT: 100
@@ -22,7 +22,7 @@ jobs:
       - name: Activate Base & Create OpenBB Environment
         run: |
           conda activate base
-          conda env create -n obb --file build/conda/conda-3-9-env.yaml
+          conda env create -n obb --file build/conda/conda-3-9-env-full.yaml
           conda init
           conda activate obb
           conda env list
@@ -32,22 +32,27 @@ jobs:
         run: |
           conda activate obb
           poetry install
-      - name: Poetry Install Predictions
+      - name: Poetry Install Portfolio Optimization and Forecasting Toolkits
         run: |
           conda activate obb
-          poetry install -E prediction
+          poetry install -E all
       - name: Poetry Install Installer
         run: |
           conda activate obb
           poetry install -E installer
+      - name: Install Specific Papermill
+        run: |
+          conda activate obb
+          pip uninstall papermill -y
+          pip install git+https://github.com/nteract/papermill.git@main
       # Building ------------
       - name: Build Terminal.spec file
         run: |
           conda activate obb
-          pyinstaller build/pyinstaller/terminal.spec
+          pyinstaller build/pyinstaller/terminal.spec --clean
       - name: Move Files into App Folder
         run: cp -r .\dist\OpenBBTerminal\ .\build\nsis\app\
-      # dont need this because log collection is turned off
+      # don't need this because log collection is turned off
       # - name: Remove Log Data
       #   run: Remove-Item .\build\nsis\app\openbb_terminal\logs\ -Recurse
       - name: Build Exe File
@@ -60,7 +65,8 @@ jobs:
           name: Windows EXE Artifact
           path: '.\build\nsis\OpenBB Terminal Setup.exe'
       - name: Run Integration Tests
-        run: dist\OpenBBTerminal\OpenBBTerminal.exe C:\Users\Administrator\actions-runner\_work\OpenBBTerminal\OpenBBTerminal\scripts -t
+        run: |
+          dist\OpenBBTerminal\OpenBBTerminal.exe C:\Users\Administrator\actions-runner\_work\OpenBBTerminal\OpenBBTerminal\openbb_terminal\miscellaneous\scripts -t
       # Cleaning ------------------------
       # Make sure to add Remove-Item C:\Users\Administrator\Desktop\OPENBB-exports -Recurse whenever integration tests get fixed
       - name: Remove Previous Build

@@ -17,7 +17,7 @@ def format_large_numbers(num: float) -> str:
         The number to convert
 
     Returns
-    ----------
+    -------
     num: str
         The formatted number
     """
@@ -26,7 +26,7 @@ def format_large_numbers(num: float) -> str:
 
 @log_start_end(log=logger)
 def display_debt(export: str = "", limit: int = 20):
-    """Displays national debt for given countries [Source: Yahoo Finance]
+    """Displays external debt for given countries [Source: Wikipedia]
 
     Parameters
     ----------
@@ -42,9 +42,9 @@ def display_debt(export: str = "", limit: int = 20):
 
     print_rich_table(
         debt_df[:limit],
-        show_index=True,
+        show_index=False,
         headers=debt_df.columns,
-        title="National Debt (USD)",
+        title="External Debt (USD)",
     )
     if export:
         export_data(

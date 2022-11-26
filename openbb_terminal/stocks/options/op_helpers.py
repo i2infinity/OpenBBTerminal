@@ -1,13 +1,43 @@
 """Option helper functions"""
 __docformat__ = "numpy"
 
-from math import log, e
+import os
+from datetime import datetime, timedelta
+from math import e, log
 from typing import Union
+
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
 
+from openbb_terminal.helper_funcs import export_data
 from openbb_terminal.rich_config import console
+
+
+def get_dte_from_expiration(date: str) -> float:
+    """
+    Converts a date to total days until the option would expire.
+    This assumes that the date is in the form %B %d, %Y such as January 11, 2023
+    This calculates time from 'now' to 4 PM the date of expiration
+    This is particularly a helper for nasdaq results.
+
+    Parameters
+    ----------
+    date: str
+        Date in format %B %d, %Y
+
+    Returns
+    -------
+    float
+        Days to expiration as a decimal
+    """
+    # Get the date as a datetime and add 16 hours (4PM)
+    expiration_time = datetime.strptime(date, "%B %d, %Y") + timedelta(hours=16)
+    # Find total seconds from now
+    time_to_now = (expiration_time - datetime.now()).total_seconds()
+    # Convert to days
+    time_to_now /= 60 * 60 * 24
+    return time_to_now
 
 
 def get_loss_at_strike(strike: float, chain: pd.DataFrame) -> float:
@@ -57,10 +87,7 @@ def calculate_max_pain(chain: pd.DataFrame) -> Union[int, float]:
         console.print("Incorrect columns.  Unable to parse max pain")
         return np.nan
 
-    loss = []
-    for price_at_exp in strikes:
-        loss.append(get_loss_at_strike(price_at_exp, chain))
-
+    loss = [get_loss_at_strike(price_at_exp, chain) for price_at_exp in strikes]
     chain["loss"] = loss
     max_pain = chain["loss"].idxmin()
 
@@ -115,6 +142,29 @@ def rn_payoff(x: str, df: pd.DataFrame, put: bool, delta: int, rf: float) -> flo
     return sum(df["Vals"]) / risk_free
 
 
+def export_yf_options(export: str, options, file_name: str):
+    """Special function to assist in exporting yf options
+
+    Parameters
+    ----------
+    export: str
+        Format to export file
+    options: Options
+        The yfinance Options object
+    file_name: str
+        The file_name to export to
+
+    """
+    for option_name in ["calls", "puts"]:
+        option = getattr(options, option_name)
+        export_data(
+            export,
+            os.path.dirname(os.path.abspath(__file__)),
+            f"{file_name}_{option_name}",
+            option,
+        )
+
+
 opt_chain_cols = {
     "lastTradeDate": {"format": "date", "label": "Last Trade Date"},
     "strike": {"format": "${x:.2f}", "label": "Strike"},
@@ -131,9 +181,23 @@ opt_chain_cols = {
 
 # pylint: disable=R0903
 class Chain:
-    def __init__(self, df: pd.DataFrame):
-        self.calls = df[df["option_type"] == "call"]
-        self.puts = df[df["option_type"] == "put"]
+    def __init__(self, df: pd.DataFrame, source: str = "tradier"):
+        if source == "tradier":
+            self.calls = df[df["option_type"] == "call"]
+            self.puts = df[df["option_type"] == "put"]
+        elif source == "nasdaq":
+            # These guys have different column names
+            call_columns = ["expiryDate", "strike"] + [
+                col for col in df.columns if col.startswith("c_")
+            ]
+            put_columns = ["expiryDate", "strike"] + [
+                col for col in df.columns if col.startswith("p_")
+            ]
+            self.calls = df[call_columns]
+            self.puts = df[put_columns]
+        else:
+            self.calls = None
+            self.puts = None
 
 
 class Option:
@@ -153,8 +217,6 @@ class Option:
 
         Parameters
         ----------
-        type : int
-            Option type, 1 for call and -1 for a put
         s : float
             The underlying asset price
         k : float
@@ -167,6 +229,8 @@ class Option:
             The number of days until expiration
         vol : float
             The underlying volatility for an option
+        opt_type : int
+            put == -1; call == +1
         """
         self.Type = int(opt_type)
         self.price = float(s)
@@ -302,7 +366,7 @@ class Option:
             The change in volatility
 
         Returns
-        -------
+        ----------
         num : float
             The Vanna
 
@@ -326,7 +390,7 @@ class Option:
             The change in volatility
 
         Returns
-        -------
+        ----------
         num : float
             The Vomma
 

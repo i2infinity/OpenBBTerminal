@@ -62,7 +62,7 @@ def format_df(df: pd.DataFrame):
 @log_start_end(log=logger)
 def get_coin_potential_returns(
     main_coin: str,
-    vs: Union[str, None] = None,
+    to_symbol: Union[str, None] = None,
     limit: Union[int, None] = None,
     price: Union[int, None] = None,
 ) -> pd.DataFrame:
@@ -72,7 +72,7 @@ def get_coin_potential_returns(
     ----------
     main_coin   : str
         Coin loaded to check potential returns for (e.g., algorand)
-    vs          : str | None
+    to_symbol          : str | None
         Coin to compare main_coin with (e.g., bitcoin)
     limit         : int | None
         Number of coins with highest market cap to compare main_coin with (e.g., 5)
@@ -133,9 +133,9 @@ def get_coin_potential_returns(
         )
         return format_df(df)
 
-    if vs:  # user passed a coin
+    if to_symbol:  # user passed a coin
         data = client.get_price(
-            ids=f"{main_coin},{vs}",
+            ids=f"{main_coin},{to_symbol}",
             vs_currencies="usd",
             include_market_cap=True,
             include_24hr_vol=False,
@@ -143,7 +143,7 @@ def get_coin_potential_returns(
             include_last_updated_at=False,
         )
         main_coin_data = data[main_coin]
-        vs_coin_data = data[vs]
+        vs_coin_data = data[to_symbol]
 
         if main_coin_data and vs_coin_data:
             market_cap_difference_percentage = calc_change(
@@ -158,7 +158,7 @@ def get_coin_potential_returns(
                         main_coin,
                         main_coin_data["usd"],
                         main_coin_data["usd_market_cap"],
-                        vs,
+                        to_symbol,
                         future_price,
                         vs_coin_data["usd_market_cap"],
                         market_cap_difference_percentage,
@@ -194,7 +194,7 @@ def get_coin_potential_returns(
                         main_coin,
                         main_coin_data["usd"],
                         main_coin_data["usd_market_cap"],
-                        "",
+                        main_coin,
                         future_price,
                         final_market_cap,
                         market_cap_difference_percentage,
@@ -231,10 +231,11 @@ def get_coin_market_chart(
     days: int
         number of days to display the data
     kwargs
+        unspecified keyword arguments
 
     Returns
     -------
-    pandas.DataFrame
+    pd.DataFrame
         Prices for given coin
         Columns: time, price, currency
     """
@@ -259,7 +260,7 @@ def get_coin_tokenomics(symbol: str = "") -> pd.DataFrame:
 
     Returns
     -------
-    pandas.DataFrame
+    pd.DataFrame
         Metric, Value with tokenomics
     """
     client = CoinGeckoAPI()
@@ -317,8 +318,8 @@ class Coin:
             Either coin symbol or coin id
 
         Returns
-        -------
-        Tuple[str, str]
+        ----------
+        Tuple[Optional[Any], Optional[Any]]
             - str with coin
             - str with symbol
         """
@@ -334,25 +335,25 @@ class Coin:
         return None, None
 
     @log_start_end(log=logger)
-    def coin_list(self) -> list:
+    def coin_list(self) -> List[Dict[str, Any]]:
         """List all available coins [Source: CoinGecko]
 
         Returns
-        -------
-        list
+        ----------
+        List[Dict[str, Any]]
             list of all available coin ids
         """
 
         return [token.get("id") for token in self._coin_list]
 
     @log_start_end(log=logger)
-    def _get_coin_info(self) -> dict:
+    def _get_coin_info(self) -> Dict[str, Any]:
         """Helper method which fetch the coin information by id from CoinGecko API like:
-         (name, price, market, ... including exchange tickers) [Source: CoinGecko]
+        (name, price, market, ... including exchange tickers) [Source: CoinGecko]
 
         Returns
-        -------
-        dict
+        ----------
+        Dict[str, Any]
             Coin information
         """
 
@@ -360,24 +361,24 @@ class Coin:
         return self.client.get_coin_by_id(self.coin_symbol, **params)
 
     @log_start_end(log=logger)
-    def _get_links(self) -> Dict:
+    def _get_links(self) -> Dict[str, Any]:
         """Helper method that extracts links from coin [Source: CoinGecko]
 
         Returns
-        -------
-        dict
+        ----------
+        Dict[str, Any]
             Links related to coin
         """
 
         return self.coin.get("links", {})
 
     @log_start_end(log=logger)
-    def get_repositories(self) -> Optional[Any]:
+    def get_repositories(self) -> Optional[Dict[str, Any]]:
         """Get list of all repositories for given coin [Source: CoinGecko]
 
         Returns
-        -------
-        list
+        ----------
+        Dict[str, Any]
             Repositories related to coin
         """
 
@@ -389,8 +390,8 @@ class Coin:
             number of pull requests, contributor etc [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             Developers Data
             Columns: Metric, Value
         """
@@ -416,8 +417,8 @@ class Coin:
         """Get list of URLs to blockchain explorers for given coin. [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             Blockchain Explorers
             Columns: Metric, Value
         """
@@ -440,8 +441,8 @@ class Coin:
         """Get list of URLs to social media like twitter, facebook, reddit... [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             Urls to social media
             Columns: Metric, Value
         """
@@ -474,8 +475,8 @@ class Coin:
         """Get list of URLs to websites like homepage of coin, forum. [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             Urls to website, homepage, forum
             Columns: Metric, Value
         """
@@ -500,20 +501,20 @@ class Coin:
         """Coins categories. [Source: CoinGecko]
 
         Returns
-        -------
-        list/dict
+        ----------
+        Union[Dict[Any, Any], List[Any]]
             Coin categories
         """
 
         return self.coin.get("categories", {})
 
     @log_start_end(log=logger)
-    def _get_base_market_data_info(self) -> dict:
+    def _get_base_market_data_info(self) -> Union[Dict[str, Any], Any]:
         """Helper method that fetches all the base market/price information about given coin. [Source: CoinGecko]
 
         Returns
-        -------
-        dict
+        ----------
+        Dict[str, Any]
             All market related information for given coin
         """
         market_dct = {}
@@ -538,8 +539,8 @@ class Coin:
         """Get all the base information about given coin. [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             Base information about coin
         """
 
@@ -569,8 +570,8 @@ class Coin:
         """Get all the base market information about given coin. [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             Base market information about coin
             Metric,Value
         """
@@ -599,9 +600,7 @@ class Coin:
             "price_change_percentage_1y",
             "market_cap_change_24h",
         ]
-        single_stats = {}
-        for col in market_single_columns:
-            single_stats[col] = market_data.get(col)
+        single_stats = {col: market_data.get(col) for col in market_single_columns}
         single_stats.update(denominated_data)
 
         if (
@@ -628,8 +627,8 @@ class Coin:
         """Get all time high data for given coin. [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             All time high price data
             Metric,Value
         """
@@ -644,10 +643,7 @@ class Coin:
             "ath_change_percentage",
         ]
 
-        results = {}
-        for column in ath_columns:
-            results[column] = market_data[column].get(currency)
-
+        results = {column: market_data[column].get(currency) for column in ath_columns}
         df = pd.Series(results).to_frame().reset_index()
         df.columns = ["Metric", "Value"]
         df["Metric"] = df["Metric"].apply(
@@ -664,8 +660,8 @@ class Coin:
         """Get all time low data for given coin. [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             All time low price data
             Metric,Value
         """
@@ -680,10 +676,7 @@ class Coin:
             "atl_date",
             "atl_change_percentage",
         ]
-        results = {}
-        for column in ath_columns:
-            results[column] = market_data[column].get(currency)
-
+        results = {column: market_data[column].get(currency) for column in ath_columns}
         df = pd.Series(results).to_frame().reset_index()
         df.columns = ["Metric", "Value"]
         df["Metric"] = df["Metric"].apply(
@@ -700,8 +693,8 @@ class Coin:
         """Get different kind of scores for given coin. [Source: CoinGecko]
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             Social, community, sentiment scores for coin
             Metric,Value
         """
@@ -755,8 +748,8 @@ class Coin:
         kwargs
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             Prices for given coin
             Columns: time, price, currency
         """
@@ -784,8 +777,8 @@ class Coin:
             on from (1/7/14/30/90/180/365, max)
 
         Returns
-        -------
-        pandas.DataFrame
+        ----------
+        pd.DataFrame
             OHLC data for coin
             Columns: time, price, currency
         """
@@ -812,7 +805,7 @@ def get_ohlc(symbol: str, vs_currency: str = "usd", days: int = 90) -> pd.DataFr
 
     Returns
     -------
-    pandas.DataFrame
+    pd.DataFrame
         OHLC data for coin
         Columns: time, price, currency
     """

@@ -5,7 +5,7 @@ import argparse
 import logging
 from typing import List
 
-from prompt_toolkit.completion import NestedCompleter
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.decorators import log_start_end
@@ -42,6 +42,7 @@ class GovController(StockBaseController):
     gov_type_choices = ["congress", "senate", "house"]
     analysis_choices = ["total", "upmom", "downmom"]
     PATH = "/stocks/gov/"
+    CHOICES_GENERATION = True
 
     def __init__(
         self,
@@ -54,35 +55,29 @@ class GovController(StockBaseController):
         self.ticker = ticker
 
         if session and obbff.USE_PROMPT_TOOLKIT:
-            choices: dict = {c: {} for c in self.controller_choices}
-            choices["lasttrades"] = {c: {} for c in self.gov_type_choices}
-            choices["topbuys"] = {c: {} for c in self.gov_type_choices}
-            choices["topsells"] = {c: {} for c in self.gov_type_choices}
-            choices["qtrcontracts"]["-a"] = {c: {} for c in self.analysis_choices}
-            choices["qtrcontracts"]["--analysis"] = {
-                c: {} for c in self.analysis_choices
-            }
+            choices: dict = self.choices_default
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def print_help(self):
         """Print help"""
         mt = MenuText("stocks/gov/", 80)
         mt.add_info("_explore")
-        mt.add_cmd("lasttrades", "QuiverQuant")
-        mt.add_cmd("topbuys", "QuiverQuant")
-        mt.add_cmd("topsells", "QuiverQuant")
-        mt.add_cmd("lastcontracts", "QuiverQuant")
-        mt.add_cmd("qtrcontracts", "QuiverQuant")
-        mt.add_cmd("toplobbying", "QuiverQuant")
+        mt.add_cmd("lasttrades")
+        mt.add_cmd("topbuys")
+        mt.add_cmd("topsells")
+        mt.add_cmd("lastcontracts")
+        mt.add_cmd("qtrcontracts")
+        mt.add_cmd("toplobbying")
         mt.add_raw("\n")
         mt.add_cmd("load")
         mt.add_raw("\n")
         mt.add_param("_ticker", self.ticker or "")
         mt.add_raw("\n")
-        mt.add_cmd("gtrades", "QuiverQuant", self.ticker)
-        mt.add_cmd("contracts", "QuiverQuant", self.ticker)
-        mt.add_cmd("histcont", "QuiverQuant", self.ticker)
-        mt.add_cmd("lobbying", "QuiverQuant", self.ticker)
+        mt.add_cmd("gtrades", self.ticker)
+        mt.add_cmd("contracts", self.ticker)
+        mt.add_cmd("histcont", self.ticker)
+        mt.add_cmd("lobbying", self.ticker)
         console.print(text=mt.menu_text, menu="Stocks - Government")
 
     def custom_reset(self):
@@ -98,7 +93,7 @@ class GovController(StockBaseController):
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             prog="lasttrades",
-            description="Last government trading trading. [Source: www.quiverquant.com]",
+            description="Last government trades. [Source: www.quiverquant.com]",
         )
         parser.add_argument(
             "-g",

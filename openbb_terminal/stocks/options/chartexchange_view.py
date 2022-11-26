@@ -3,25 +3,23 @@ __docformat__ = "numpy"
 
 import logging
 import os
-from typing import Optional, List
+from typing import List, Optional
+
+import matplotlib.pyplot as plt
+import mplfinance as mpf
 import pandas as pd
 
-import mplfinance as mpf
-import matplotlib.pyplot as plt
-
+from openbb_terminal.config_terminal import theme
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import (
     export_data,
-    print_rich_table,
     is_valid_axes_count,
-)
-from openbb_terminal.stocks.options import chartexchange_model
-from openbb_terminal.config_terminal import theme
-from openbb_terminal.rich_config import console
-from openbb_terminal.helper_funcs import (
-    plot_autoscale,
     lambda_long_number_format_y_axis,
+    plot_autoscale,
+    print_rich_table,
 )
+from openbb_terminal.rich_config import console
+from openbb_terminal.stocks.options import chartexchange_model
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +57,10 @@ def plot_chart(
 
 @log_start_end(log=logger)
 def display_raw(
-    symbol: str,
-    expiry: str,
-    call: bool,
-    price: float = 0,
+    symbol: str = "GME",
+    expiry: str = "2021-02-05",
+    call: bool = True,
+    price: float = 90,
     limit: int = 10,
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
@@ -100,14 +98,14 @@ def display_raw(
         "volume": True,
         "xrotation": theme.xticks_rotation,
         "scale_padding": {"left": 0.3, "right": 1, "top": 0.8, "bottom": 0.8},
-        "upexpiry_width_config": {
+        "update_width_config": {
             "candle_linewidth": 0.6,
             "candle_width": 0.8,
             "volume_linewidth": 0.8,
             "volume_width": 0.8,
         },
         "warn_too_much_data": 10000,
-        "expirytime_format": "%Y-%b-%d",
+        "datetime_format": "%Y-%b-%d",
     }
     # This plot has 2 axes
     option_type = "call" if call else "put"

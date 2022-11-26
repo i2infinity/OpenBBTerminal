@@ -28,6 +28,7 @@ def get_history_asset_from_terra_address(
         Terra asset {ust,luna,sdt}
     address : str
         Terra address. Valid terra addresses start with 'terra'
+
     Returns
     -------
     pd.DataFrame
@@ -55,4 +56,21 @@ def get_history_asset_from_terra_address(
     else:
         df = pd.DataFrame()
 
+    return df
+
+
+@log_start_end(log=logger)
+def get_anchor_yield_reserve() -> pd.DataFrame:
+    """Displays the 30-day history of the Anchor Yield Reserve.
+    [Source: https://terra.engineer/]
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe containing historical data
+    """
+
+    df = get_history_asset_from_terra_address(
+        address="terra1tmnqgvg567ypvsvk6rwsga3srp7e3lg6u0elp8"
+    )
     return df

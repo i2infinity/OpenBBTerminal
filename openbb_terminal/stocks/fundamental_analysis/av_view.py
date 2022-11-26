@@ -18,6 +18,9 @@ from openbb_terminal.helper_funcs import (
 )
 from openbb_terminal.rich_config import console
 from openbb_terminal.stocks.fundamental_analysis import av_model
+from openbb_terminal.helpers_denomination import (
+    transform as transform_by_denomination,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,6 @@ def display_overview(symbol: str):
     )
 
     console.print(f"Company Description:\n\n{df_fa.loc['Description'][0]}")
-    console.print("")
 
 
 @log_start_end(log=logger)
@@ -106,25 +108,12 @@ def display_income_statement(
 
     if plot:
         rows_plot = len(plot)
-        maximum_value = df_income.max().max()
         income_plot_data = df_income.transpose()
         income_plot_data.columns = income_plot_data.columns.str.lower()
 
         if not ratios:
-            if maximum_value > 1_000_000_000_000:
-                df_rounded = income_plot_data / 1_000_000_000_000
-                denomination = " in Trillions"
-            elif maximum_value > 1_000_000_000:
-                df_rounded = income_plot_data / 1_000_000_000
-                denomination = " in Billions"
-            elif maximum_value > 1_000_000:
-                df_rounded = income_plot_data / 1_000_000
-                denomination = " in Millions"
-            elif maximum_value > 1_000:
-                df_rounded = income_plot_data / 1_000
-                denomination = " in Thousands"
-            else:
-                df_rounded = income_plot_data
+            (df_rounded, denomination) = transform_by_denomination(income_plot_data)
+            if denomination == "Units":
                 denomination = ""
         else:
             df_rounded = income_plot_data
@@ -201,25 +190,12 @@ def display_balance_sheet(
 
     if plot:
         rows_plot = len(plot)
-        maximum_value = df_balance.max().max()
         balance_plot_data = df_balance.transpose()
         balance_plot_data.columns = balance_plot_data.columns.str.lower()
 
         if not ratios:
-            if maximum_value > 1_000_000_000_000:
-                df_rounded = balance_plot_data / 1_000_000_000_000
-                denomination = " in Trillions"
-            elif maximum_value > 1_000_000_000:
-                df_rounded = balance_plot_data / 1_000_000_000
-                denomination = " in Billions"
-            elif maximum_value > 1_000_000:
-                df_rounded = balance_plot_data / 1_000_000
-                denomination = " in Millions"
-            elif maximum_value > 1_000:
-                df_rounded = balance_plot_data / 1_000
-                denomination = " in Thousands"
-            else:
-                df_rounded = balance_plot_data
+            (df_rounded, denomination) = transform_by_denomination(balance_plot_data)
+            if denomination == "Units":
                 denomination = ""
         else:
             df_rounded = balance_plot_data
@@ -298,25 +274,12 @@ def display_cash_flow(
 
     if plot:
         rows_plot = len(plot)
-        maximum_value = df_cash.max().max()
         cash_plot_data = df_cash.transpose()
         cash_plot_data.columns = cash_plot_data.columns.str.lower()
 
         if not ratios:
-            if maximum_value > 1_000_000_000_000:
-                df_rounded = cash_plot_data / 1_000_000_000_000
-                denomination = " in Trillions"
-            elif maximum_value > 1_000_000_000:
-                df_rounded = cash_plot_data / 1_000_000_000
-                denomination = " in Billions"
-            elif maximum_value > 1_000_000:
-                df_rounded = cash_plot_data / 1_000_000
-                denomination = " in Millions"
-            elif maximum_value > 1_000:
-                df_rounded = cash_plot_data / 1_000
-                denomination = " in Thousands"
-            else:
-                df_rounded = cash_plot_data
+            (df_rounded, denomination) = transform_by_denomination(cash_plot_data)
+            if denomination == "Units":
                 denomination = ""
         else:
             df_rounded = cash_plot_data
@@ -418,7 +381,6 @@ def display_fraud(
     df = av_model.get_fraud_ratios(symbol, detail=detail)
 
     if df.empty:
-        console.print("")
         return
 
     df_color = df.copy()
@@ -474,7 +436,6 @@ def display_dupont(
     """
     df = av_model.get_dupont(symbol)
     if df.empty:
-        console.print("[red]Invalid response from AlphaVantage[/red]\n")
         return
     if raw:
         print_rich_table(

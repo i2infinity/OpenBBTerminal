@@ -30,7 +30,7 @@ register_matplotlib_converters()
 
 @log_start_end(log=logger)
 def view_ma(
-    series: pd.Series,
+    data: pd.Series,
     window: List[int] = None,
     offset: int = 0,
     ma_type: str = "EMA",
@@ -42,7 +42,7 @@ def view_ma(
 
     Parameters
     ----------
-    series: pd.Series
+    data: pd.Series
         Series of prices
     window: List[int]
         Length of EMA window
@@ -56,9 +56,21 @@ def view_ma(
         Format to export data
     external_axes: Optional[List[plt.Axes]], optional
         External axes (1 axis is expected in the list), by default None
+
+    Examples
+    --------
+    >>> from openbb_terminal.sdk import openbb
+    >>> df = openbb.stocks.load("AAPL")
+    >>> openbb.ta.ma_chart(data=df["Adj Close"], symbol="AAPL", ma_type="EMA", window=[20, 50, 100])
+
+
+    >>> from openbb_terminal.sdk import openbb
+    >>> spuk_index = openbb.economy.index(indices = ["^SPUK"])
+    >>> openbb.ta.ma_chart(data = spuk_index["^SPUK"], symbol = "S&P UK Index", ma_type = "EMA", window = [20, 50, 100])
     """
     # Define a dataframe for adding EMA series to it
-    price_df = pd.DataFrame(series)
+    price_df = pd.DataFrame(data)
+    price_df.index.name = "date"
 
     l_legend = [symbol]
     if not window:
@@ -66,19 +78,19 @@ def view_ma(
 
     for win in window:
         if ma_type == "EMA":
-            df_ta = overlap_model.ema(series, win, offset)
+            df_ta = overlap_model.ema(data, win, offset)
             l_legend.append(f"EMA {win}")
         elif ma_type == "SMA":
-            df_ta = overlap_model.sma(series, win, offset)
+            df_ta = overlap_model.sma(data, win, offset)
             l_legend.append(f"SMA {win}")
         elif ma_type == "WMA":
-            df_ta = overlap_model.wma(series, win, offset)
+            df_ta = overlap_model.wma(data, win, offset)
             l_legend.append(f"WMA {win}")
         elif ma_type == "HMA":
-            df_ta = overlap_model.hma(series, win, offset)
+            df_ta = overlap_model.hma(data, win, offset)
             l_legend.append(f"HMA {win}")
         elif ma_type == "ZLMA":
-            df_ta = overlap_model.zlma(series, win, offset)
+            df_ta = overlap_model.zlma(data, win, offset)
             l_legend.append(f"ZLMA {win}")
         price_df = price_df.join(df_ta)
 
@@ -121,10 +133,10 @@ def view_ma(
 def view_vwap(
     data: pd.DataFrame,
     symbol: str = "",
-    start_date: str = None,
-    end_date: str = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     offset: int = 0,
-    s_interval: str = "",
+    interval: str = "",
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ):
@@ -138,11 +150,11 @@ def view_vwap(
         Ticker
     offset : int
         Offset variable
-    start_date: datetime
-        Start date to get data from with
-    end_date: datetime
-        End date to get data from with
-    s_interval : str
+    start_date: Optional[str]
+        Initial date, format YYYY-MM-DD
+    end_date: Optional[str]
+        Final date, format YYYY-MM-DD
+    interval : str
         Interval of data
     export : str
         Format to export data
@@ -198,7 +210,7 @@ def view_vwap(
         )
         fig, ax = mpf.plot(day_df, **candle_chart_kwargs)
         fig.suptitle(
-            f"{symbol} {s_interval} VWAP",
+            f"{symbol} {interval} VWAP",
             x=0.055,
             y=0.965,
             horizontalalignment="left",

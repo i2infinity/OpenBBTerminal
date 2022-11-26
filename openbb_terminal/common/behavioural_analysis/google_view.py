@@ -18,7 +18,6 @@ from openbb_terminal.helper_funcs import (
     print_rich_table,
     is_valid_axes_count,
 )
-from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ def display_mentions(
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ):
-    """Plot weekly bars of stock's interest over time. other users watchlist. [Source: Google]
+    """Plots weekly bars of stock's interest over time. other users watchlist. [Source: Google].
 
     Parameters
     ----------
@@ -43,7 +42,11 @@ def display_mentions(
     external_axes : Optional[List[plt.Axes]], optional
         External axes (1 axis is expected in the list), by default None
     """
+
     df_interest = google_model.get_mentions(symbol)
+
+    if df_interest.empty:
+        return
 
     # This plot has 1 axis
     if external_axes is None:
@@ -89,7 +92,7 @@ def display_correlation_interest(
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ):
-    """Plot interest over time of words/sentences versus stock price. [Source: Google]
+    """Plots interest over time of words/sentences versus stock price. [Source: Google].
 
     Parameters
     ----------
@@ -156,7 +159,7 @@ def display_regions(
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ):
-    """Plot bars of regions based on stock's interest. [Source: Google]
+    """Plots bars of regions based on stock's interest. [Source: Google].
 
     Parameters
     ----------
@@ -171,6 +174,9 @@ def display_regions(
     """
     df_interest_region = google_model.get_regions(symbol)
 
+    if df_interest_region.empty:
+        return
+
     # This plot has 1 axis
     if external_axes is None:
         _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
@@ -179,15 +185,10 @@ def display_regions(
     else:
         return
 
-    if df_interest_region.empty:
-        console.print("No region data found.")
-        console.print("")
-        return
-
     df_interest_region = df_interest_region.head(limit)
     df = df_interest_region.sort_values([symbol], ascending=True)
 
-    ax.set_title(f"Top's regions interest on {symbol}")
+    ax.set_title(f"Regions with highest interest in {symbol}")
     ax.barh(
         y=df.index, width=df[symbol], color=theme.get_colors(reverse=True), zorder=3
     )
@@ -203,7 +204,7 @@ def display_regions(
 
 @log_start_end(log=logger)
 def display_queries(symbol: str, limit: int = 5, export: str = ""):
-    """Print top related queries with this stock's query. [Source: Google]
+    """Prints table showing top related queries with this stock's query. [Source: Google].
 
     Parameters
     ----------
@@ -213,40 +214,48 @@ def display_queries(symbol: str, limit: int = 5, export: str = ""):
         Number of regions to show
     export: str
         Format to export data
+        {"csv","json","xlsx","png","jpg","pdf","svg"}
     """
+    # Retrieve a dict with top and rising queries
+    df = google_model.get_queries(symbol, limit)
 
-    df_related_queries = google_model.get_queries(symbol)
-    df = df_related_queries.copy()
-    df_related_queries = df_related_queries[symbol]["top"].head(limit)
-    df_related_queries["value"] = df_related_queries["value"].apply(
-        lambda x: str(x) + "%"
-    )
+    if df.empty:
+        return
+
     print_rich_table(
-        df_related_queries,
-        headers=list(df_related_queries.columns),
+        df,
+        headers=list(df.columns),
         title=f"Top {symbol}'s related queries",
     )
 
-    export_data(export, os.path.dirname(os.path.abspath(__file__)), "queries", df)
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "queries",
+        df,
+    )
 
 
 @log_start_end(log=logger)
 def display_rise(symbol: str, limit: int = 10, export: str = ""):
-    """Print top rising related queries with this stock's query. [Source: Google]
+    """Prints top rising related queries with this stock's query. [Source: Google].
 
     Parameters
     ----------
     symbol : str
         Ticker symbol
     limit: int
-        Number of regions to show
+        Number of queries to show
     export: str
         Format to export data
     """
-    df_related_queries = google_model.get_rise(symbol)
+    df_related_queries = google_model.get_rise(symbol, limit)
+
+    if df_related_queries.empty:
+        return
 
     print_rich_table(
-        df_related_queries.head(limit),
+        df_related_queries,
         headers=list(df_related_queries.columns),
         title=f"Top rising {symbol}'s related queries",
     )

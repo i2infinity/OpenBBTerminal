@@ -10,7 +10,7 @@ import requests
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 from openbb_terminal import config_terminal as cfg
-from openbb_terminal.decorators import log_start_end
+from openbb_terminal.decorators import check_api_key, log_start_end
 from openbb_terminal.helper_funcs import clean_tweet, get_data
 from openbb_terminal.rich_config import console
 
@@ -20,13 +20,14 @@ analyzer = SentimentIntensityAnalyzer()
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_TWITTER_BEARER_TOKEN"])
 def load_analyze_tweets(
     symbol: str,
     limit: int = 100,
     start_date: Optional[str] = "",
     end_date: Optional[str] = "",
 ) -> pd.DataFrame:
-    """Load tweets from twitter API and analyzes using VADER
+    """Load tweets from twitter API and analyzes using VADER.
 
     Parameters
     ----------
@@ -125,8 +126,8 @@ def get_sentiment(
     symbol: str,
     n_tweets: int = 15,
     n_days_past: int = 2,
-):
-    """Get sentiments from symbol
+) -> pd.DataFrame:
+    """Get sentiments from symbol.
 
     Parameters
     ----------
@@ -136,6 +137,11 @@ def get_sentiment(
         Number of tweets to get per hour
     n_days_past: int
         Number of days to extract tweets for
+
+    Returns
+    -------
+    df_sentiment: pd.DataFrame
+        Dataframe of sentiment
     """
     # Date format string required by twitter
     dt_format = "%Y-%m-%dT%H:%M:%SZ"
@@ -171,7 +177,9 @@ def get_sentiment(
             end_date=dt_recent.strftime(dt_format),
         )
 
-        if temp.empty:
+        if (isinstance(temp, pd.DataFrame) and temp.empty) or (
+            not isinstance(temp, pd.DataFrame) and not temp
+        ):
             return pd.DataFrame()
 
         df_tweets = pd.concat([df_tweets, temp])

@@ -23,12 +23,10 @@ logger = logging.getLogger(__name__)
 
 register_matplotlib_converters()
 
-presets_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "presets/")
-
 
 @log_start_end(log=logger)
 def historical(
-    preset_loaded: str,
+    preset_loaded: str = "top_gainers",
     limit: int = 10,
     start_date: str = (
         datetime.datetime.now() - datetime.timedelta(days=6 * 30)
@@ -65,6 +63,9 @@ def historical(
     df_screener, l_stocks, limit_random_stocks = yahoofinance_model.historical(
         preset_loaded, limit, start_date, type_candle, normalize
     )
+
+    if df_screener.empty:
+        return []
 
     if l_stocks:
         # This plot has 1 axis

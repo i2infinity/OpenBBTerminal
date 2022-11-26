@@ -27,9 +27,8 @@ def get_rolling_avg(
 
     Returns
     -------
-    pd.DataFrame:
-        Dataframe of rolling mean
-    pd.DataFrame:
+    Tuple[pd.DataFrame, pd.DataFrame]
+        Dataframe of rolling mean,
         Dataframe of rolling standard deviation
     """
     rolling_mean = data.rolling(window, center=True, min_periods=1).mean()
@@ -53,10 +52,9 @@ def get_spread(
 
     Returns
     -------
-    df_sd: pd.DataFrame
-        Dataframe of rolling standard deviation
-    df_var: pd.DataFrame
-        Dataframe of rolling standard deviation
+    Tuple[pd.DataFrame, pd.DataFrame]
+        Dataframe of rolling standard deviation,
+        Dataframe of rolling variance
     """
     df_sd = ta.stdev(
         close=data,
@@ -72,7 +70,7 @@ def get_spread(
 
 @log_start_end(log=logger)
 def get_quantile(
-    data: pd.DataFrame, limit: int = 14, quantile_pct: float = 0.5
+    data: pd.DataFrame, window: int = 14, quantile_pct: float = 0.5
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Overlay Median & Quantile
 
@@ -80,22 +78,21 @@ def get_quantile(
     ----------
     data: pd.DataFrame
         Dataframe of targeted data
-    limit : int
+    window : int
         Length of window
     quantile_pct: float
         Quantile to display
 
     Returns
     -------
-    df_med : pd.DataFrame
-        Dataframe of median prices over window
-    df_quantile : pd.DataFrame
-        Dataframe of gievn quantile prices over window
+    Tuple[pd.DataFrame, pd.DataFrame]
+        Dataframe of rolling median prices over window,
+        Dataframe of rolling quantile prices over window
     """
-    df_med = ta.median(close=data, length=limit).dropna()
+    df_med = ta.median(close=data, length=window).dropna()
     df_quantile = ta.quantile(
         data,
-        length=limit,
+        length=window,
         q=quantile_pct,
     ).dropna()
 

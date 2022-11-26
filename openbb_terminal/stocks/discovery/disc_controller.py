@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import List
 
-from prompt_toolkit.completion import NestedCompleter
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.decorators import log_start_end
@@ -20,16 +20,17 @@ from openbb_terminal.helper_funcs import (
 )
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import BaseController
-from openbb_terminal.rich_config import console, MenuText
 from openbb_terminal.stocks.discovery import (
     ark_view,
-    fidelity_view,
     finnhub_view,
     nasdaq_view,
     seeking_alpha_view,
     shortinterest_view,
     yahoofinance_view,
+    finviz_view,
 )
+from openbb_terminal.stocks import stocks_helper
+from openbb_terminal.rich_config import console, MenuText
 
 # pylint:disable=C0302
 
@@ -50,7 +51,6 @@ class DiscoveryController(BaseController):
         "active",
         "ulc",
         "asc",
-        "ford",
         "arkord",
         "upcoming",
         "trending",
@@ -59,6 +59,7 @@ class DiscoveryController(BaseController):
         "cnews",
         "rtat",
         "divcal",
+        "heatmap",
     ]
 
     arkord_sortby_choices = [
@@ -110,22 +111,15 @@ class DiscoveryController(BaseController):
         "Annual Dividend",
         "Announcement Date",
     ]
+    heatmap_timeframes = ["day", "week", "month", "3month", "6month", "year", "ytd"]
+    CHOICES_GENERATION = True
 
     def __init__(self, queue: List[str] = None):
         """Constructor"""
         super().__init__(queue)
 
         if session and obbff.USE_PROMPT_TOOLKIT:
-            choices: dict = {c: {} for c in self.controller_choices}
-            choices["arkord"]["-s"] = {c: None for c in self.arkord_sortby_choices}
-            choices["arkord"]["--sortby"] = {
-                c: None for c in self.arkord_sortby_choices
-            }
-            choices["arkord"]["--fund"] = {c: None for c in self.arkord_fund_choices}
-            choices["cnews"]["-t"] = {c: None for c in self.cnews_type_choices}
-            choices["cnews"]["--type"] = {c: None for c in self.cnews_type_choices}
-            choices["divcal"]["-s"] = {c: None for c in self.dividend_columns}
-            choices["divcal"]["--sort"] = {c: None for c in self.dividend_columns}
+            choices: dict = self.choices_default
 
             self.completer = NestedCompleter.from_nested_dict(choices)
 
@@ -141,7 +135,6 @@ class DiscoveryController(BaseController):
         mt.add_cmd("active", "Yahoo Finance")
         mt.add_cmd("ulc", "Yahoo Finance")
         mt.add_cmd("asc", "Yahoo Finance")
-        mt.add_cmd("ford", "Fidelity")
         mt.add_cmd("arkord", "Cathies Ark")
         mt.add_cmd("upcoming", "Seeking Alpha")
         mt.add_cmd("trending", "Seeking Alpha")
@@ -150,6 +143,7 @@ class DiscoveryController(BaseController):
         mt.add_cmd("hotpenny", "Shortinterest")
         mt.add_cmd("rtat", "NASDAQ Data Link")
         mt.add_cmd("divcal", "NASDAQ Data Link")
+        mt.add_cmd("heatmap", "Finviz")
         console.print(text=mt.menu_text, menu="Stocks - Discovery")
 
     # TODO Add flag for adding last price to the following table
@@ -173,19 +167,23 @@ class DiscoveryController(BaseController):
         parser.add_argument(
             "-s",
             "--sort",
-            default=["Dividend"],
-            nargs="+",
-            type=str,
+            default="dividend",
+            type=str.lower,
+            choices=stocks_helper.format_parse_choices(self.dividend_columns),
             help="Column to sort by",
             dest="sort",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
-            default=False,
+            "-r",
+            "--reverse",
             action="store_true",
-            help="Flag to sort in ascending order",
-            dest="ascend",
+            dest="reverse",
+            default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         if other_args and "-" not in other_args[0][0]:
             other_args.insert(0, "-d")
@@ -193,14 +191,15 @@ class DiscoveryController(BaseController):
             parser, other_args, export_allowed=EXPORT_ONLY_RAW_DATA_ALLOWED, limit=10
         )
         if ns_parser:
-            sort_col = " ".join(ns_parser.sort)
-            if sort_col not in self.dividend_columns:
-                console.print(f"{sort_col} not a valid selection for sorting.\n")
-                return
+            # Map fixes
+
+            sort_col = stocks_helper.map_parse_choices(self.dividend_columns)[
+                ns_parser.sort
+            ]
             nasdaq_view.display_dividend_calendar(
-                ns_parser.date.strftime("%Y-%m-%d"),
+                date=ns_parser.date.strftime("%Y-%m-%d"),
                 sortby=sort_col,
-                ascending=ns_parser.ascend,
+                ascend=ns_parser.reverse,
                 limit=ns_parser.limit,
                 export=ns_parser.export,
             )
@@ -529,40 +528,6 @@ class DiscoveryController(BaseController):
             )
 
     @log_start_end(log=logger)
-    def call_ford(self, other_args: List[str]):
-        """Process ford command"""
-        parser = argparse.ArgumentParser(
-            add_help=False,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-            prog="ford",
-            description="""
-                Orders by Fidelity customers. Information shown in the table below
-                is based on the volume of orders entered on the "as of" date shown. Securities
-                identified are not recommended or endorsed by Fidelity and are displayed for
-                informational purposes only. [Source: Fidelity]
-            """,
-        )
-        parser.add_argument(
-            "-l",
-            "--limit",
-            action="store",
-            dest="limit",
-            type=check_int_range(1, 25),
-            default=5,
-            help="Limit of stocks to display.",
-        )
-        if other_args and "-" not in other_args[0][0]:
-            other_args.insert(0, "-l")
-        ns_parser = self.parse_known_args_and_warn(
-            parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
-        )
-        if ns_parser:
-            fidelity_view.orders_view(
-                limit=ns_parser.limit,
-                export=ns_parser.export,
-            )
-
-    @log_start_end(log=logger)
     def call_arkord(self, other_args: List[str]):
         """Process arkord command"""
         parser = argparse.ArgumentParser(
@@ -587,17 +552,21 @@ class DiscoveryController(BaseController):
             "--sortby",
             dest="sort_col",
             choices=self.arkord_sortby_choices,
-            nargs="+",
+            type=str,
             help="Column to sort by",
             default="",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
-            dest="ascend",
-            help="Flag to sort in ascending order",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         parser.add_argument(
             "-b",
@@ -632,7 +601,7 @@ class DiscoveryController(BaseController):
             ark_view.ark_orders_view(
                 limit=ns_parser.limit,
                 sortby=ns_parser.sort_col,
-                ascending=ns_parser.ascend,
+                ascend=ns_parser.reverse,
                 buys_only=ns_parser.buys_only,
                 sells_only=ns_parser.sells_only,
                 fund=ns_parser.fund,
@@ -835,7 +804,7 @@ class DiscoveryController(BaseController):
 
     @log_start_end(log=logger)
     def call_rtat(self, other_args: List[str]):
-        """Process fds command"""
+        """Process rtat command"""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -864,3 +833,28 @@ class DiscoveryController(BaseController):
             nasdaq_view.display_top_retail(
                 limit=ns_parser.limit, export=ns_parser.export
             )
+
+    @log_start_end(log=logger)
+    def call_heatmap(self, other_args: List[str]):
+        """Process heatmap command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="heatmap",
+            description="""
+                    Get the SP 500 heatmap from finviz and display in interactive treemap
+                """,
+        )
+        parser.add_argument(
+            "-t",
+            "--timeframe",
+            default="day",
+            choices=self.heatmap_timeframes,
+            help="Timeframe to get heatmap data for",
+            dest="timeframe",
+        )
+        ns_parser = self.parse_known_args_and_warn(
+            parser, other_args, export_allowed=EXPORT_ONLY_RAW_DATA_ALLOWED
+        )
+        if ns_parser:
+            finviz_view.display_heatmap(ns_parser.timeframe, ns_parser.export)

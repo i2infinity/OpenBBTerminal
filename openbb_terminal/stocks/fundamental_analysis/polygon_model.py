@@ -7,13 +7,14 @@ import pandas as pd
 import requests
 
 from openbb_terminal import config_terminal as cfg
-from openbb_terminal.decorators import log_start_end
+from openbb_terminal.decorators import check_api_key, log_start_end
 from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_POLYGON_KEY"])
 def get_financials(
     symbol: str, statement: str, quarterly: bool = False, ratios: bool = False
 ) -> pd.DataFrame:
@@ -107,7 +108,7 @@ def get_financials(
                 cash_flows = cash_flows[["value"]]
                 cash_flows.columns = [single_thing["filing_date"]]
 
-                first = False
+            first = False
         else:
             values = pd.DataFrame(
                 pd.DataFrame.from_dict(
@@ -122,6 +123,7 @@ def get_financials(
                     single_thing["financials"]["income_statement"], orient="index"
                 ).value
             )
+            values.columns = [single_thing["filing_date"]]
             income_statements = pd.concat([income_statements, values], axis=1)
             if not quarterly:
                 values = pd.DataFrame(

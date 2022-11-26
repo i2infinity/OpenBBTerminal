@@ -11,11 +11,12 @@ import requests
 from openbb_terminal.decorators import log_start_end
 
 logger = logging.getLogger(__name__)
+# pylint: disable=unsupported-assignment-operation
 
 
 @log_start_end(log=logger)
 def get_dark_pool_short_positions(
-    sortby: str = "dpp_dollar", ascending: bool = False
+    sortby: str = "dpp_dollar", ascend: bool = False
 ) -> pd.DataFrame:
     """Get dark pool short positions. [Source: Stockgrid]
 
@@ -26,11 +27,11 @@ def get_dark_pool_short_positions(
         'sv_pct': Short Vol. %%, 'nsv': Net Short Vol. [1M],
         'nsv_dollar': Net Short Vol. ($100M), 'dpp': DP Position [1M],
         'dpp_dollar': DP Position ($1B)
-    ascending : bool
+    ascend : bool
         Data in ascending order
 
     Returns
-    ----------
+    -------
     pd.DataFrame
         Dark pool short position data
     """
@@ -45,7 +46,7 @@ def get_dark_pool_short_positions(
 
     field = d_fields_endpoints[sortby]
 
-    if ascending:
+    if ascend:
         order = "asc"
     else:
         order = "desc"
@@ -82,7 +83,7 @@ def get_short_interest_days_to_cover(sortby: str = "float") -> pd.DataFrame:
         'dtc': Days to Cover, 'si': Short Interest
 
     Returns
-    ----------
+    -------
     pd.DataFrame
         Short interest and days to cover data
     """
@@ -126,11 +127,9 @@ def get_short_interest_volume(symbol: str) -> Tuple[pd.DataFrame, List]:
         Stock to get data from
 
     Returns
-    ----------
-    pd.DataFrame
-        Short interest volume data
-    List
-        Price data
+    -------
+    Tuple[pd.DataFrame, List]
+        Short interest volume data, Price data
     """
     link = f"https://stockgridapp.herokuapp.com/get_dark_pool_individual_data?ticker={symbol}"
     response = requests.get(link)
@@ -172,7 +171,7 @@ def get_net_short_position(symbol: str) -> pd.DataFrame:
         Stock to get data from
 
     Returns
-    ----------
+    -------
     pd.DataFrame
         Net short position
     """

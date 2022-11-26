@@ -6,9 +6,9 @@ import logging
 from datetime import datetime
 from typing import List
 
-import numpy as np
 import pandas as pd
-from prompt_toolkit.completion import NestedCompleter
+
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.common.quantitative_analysis import qa_view, rolling_view
@@ -25,6 +25,8 @@ from openbb_terminal.parent_classes import StockBaseController
 from openbb_terminal.rich_config import console, MenuText
 from openbb_terminal.stocks.quantitative_analysis.beta_view import beta_view
 from openbb_terminal.stocks.quantitative_analysis.factors_view import capm_view
+from openbb_terminal.stocks.quantitative_analysis.qa_model import full_stock_df
+from openbb_terminal.stocks import stocks_helper
 
 # pylint: disable=C0302
 
@@ -54,8 +56,6 @@ class QaController(StockBaseController):
         "normality",
         "qqplot",
         "unitroot",
-        "goodness",
-        "unitroot",
         "capm",
         "beta",
         "var",
@@ -66,9 +66,13 @@ class QaController(StockBaseController):
     ]
 
     stock_interval = [1, 5, 15, 30, 60]
-    stock_sources = ["yf", "av", "iex"]
+    stock_sources = ["YahooFinance", "AlphaVantage", "IEXCloud"]
     distributions = ["laplace", "student_t", "logistic", "normal"]
+    FULLER_REG = ["c", "ct", "ctt", "nc"]
+    KPS_REG = ["c", "ct"]
+    VALID_DISTRIBUTIONS = ["laplace", "student_t", "logistic", "normal"]
     PATH = "/stocks/qa/"
+    CHOICES_GENERATION = True
 
     def __init__(
         self,
@@ -81,28 +85,15 @@ class QaController(StockBaseController):
         """Constructor"""
         super().__init__(queue)
 
-        # TODO: Move these calculations to a model
-        stock["Returns"] = stock["Adj Close"].pct_change()
-        stock["LogRet"] = np.log(stock["Adj Close"]) - np.log(
-            stock["Adj Close"].shift(1)
-        )
-        stock["LogPrice"] = np.log(stock["Adj Close"])
-        stock = stock.rename(columns={"Adj Close": "AdjClose"})
-        stock = stock.dropna()
-        stock.columns = [x.lower() for x in stock.columns]
-
-        self.stock = stock
+        self.stock = full_stock_df(stock)
         self.ticker = ticker
         self.start = start
         self.interval = interval
         self.target = "returns"
 
         if session and obbff.USE_PROMPT_TOOLKIT:
-            choices: dict = {c: {} for c in self.controller_choices}
-            choices["pick"] = {c: None for c in list(stock.columns)}
-            choices["load"]["-i"] = {c: None for c in self.stock_interval}
-            choices["load"]["--interval"] = {c: None for c in self.stock_interval}
-            choices["load"]["--source"] = {c: None for c in self.stock_sources}
+            choices: dict = self.choices_default
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def print_help(self):
@@ -176,7 +167,7 @@ class QaController(StockBaseController):
             "-t",
             "--target",
             dest="target",
-            type=lambda x: x.lower(),
+            type=str.lower,
             choices=list(self.stock.columns),
             help="Select variable to analyze",
         )
@@ -186,7 +177,6 @@ class QaController(StockBaseController):
         ns_parser = self.parse_known_args_and_warn(parser, other_args)
         if ns_parser:
             self.target = ns_parser.target
-        console.print("")
 
     @log_start_end(log=logger)
     def call_raw(self, other_args: List[str]):
@@ -207,12 +197,24 @@ class QaController(StockBaseController):
             dest="limit",
         )
         parser.add_argument(
-            "-d",
-            "--descend",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
-            dest="descend",
-            help="Sort in descending order",
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
+        )
+        parser.add_argument(
+            "-s",
+            "--sortby",
+            help="The column to sort by",
+            choices=stocks_helper.format_parse_choices(self.stock.columns),
+            type=str.lower,
+            dest="sortby",
         )
 
         ns_parser = self.parse_known_args_and_warn(
@@ -220,10 +222,10 @@ class QaController(StockBaseController):
         )
         if ns_parser:
             qa_view.display_raw(
-                data=self.stock[self.target],
+                data=self.stock,
                 limit=ns_parser.limit,
-                sortby="",
-                descend=ns_parser.descend,
+                sortby=ns_parser.sortby,
+                ascend=ns_parser.reverse,
                 export=ns_parser.export,
             )
 
@@ -251,20 +253,12 @@ class QaController(StockBaseController):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             add_help=False,
             prog="line",
-            description="Show line plot of selected data and allow to draw lines or highlight specific datetimes.",
+            description="Show line plot of selected data or highlight specific datetimes.",
         )
         parser.add_argument(
             "--log",
             help="Plot with y on log scale",
             dest="log",
-            action="store_true",
-            default=False,
-        )
-        parser.add_argument(
-            "-d",
-            "--draw",
-            help="Draw lines and annotate on the plot",
-            dest="draw",
             action="store_true",
             default=False,
         )
@@ -291,7 +285,6 @@ class QaController(StockBaseController):
                 self.stock[self.target],
                 title=f"{self.ticker} {self.target}",
                 log_y=ns_parser.log,
-                draw=ns_parser.draw,
                 markers_lines=ns_parser.ml,
                 markers_scatter=ns_parser.ms,
             )
@@ -313,7 +306,7 @@ class QaController(StockBaseController):
         ns_parser = self.parse_known_args_and_warn(parser, other_args)
         if ns_parser:
             qa_view.display_hist(
-                name=self.ticker,
+                symbol=self.ticker,
                 data=self.stock,
                 target=self.target,
                 bins=ns_parser.n_bins,
@@ -395,7 +388,7 @@ class QaController(StockBaseController):
         )
         if ns_parser:
             qa_view.display_seasonal(
-                name=self.ticker,
+                symbol=self.ticker,
                 data=self.stock,
                 target=self.target,
                 multiplicative=ns_parser.multiplicative,
@@ -467,9 +460,9 @@ class QaController(StockBaseController):
         )
         ns_parser = self.parse_known_args_and_warn(parser, other_args)
         if ns_parser:
-            if self.target != "AdjClose":
+            if self.target != "adjclose":
                 console.print(
-                    "Target not AdjClose.  For best results, use `pick AdjClose` first."
+                    "Target not adjclose.  For best results, use `pick adjclose` first."
                 )
 
             qa_view.display_acf(
@@ -507,7 +500,7 @@ class QaController(StockBaseController):
                 symbol=self.ticker,
                 data=self.stock,
                 target=self.target,
-                limit=ns_parser.n_window,
+                window=ns_parser.n_window,
                 export=ns_parser.export,
             )
 
@@ -538,7 +531,7 @@ class QaController(StockBaseController):
                 data=self.stock,
                 symbol=self.ticker,
                 target=self.target,
-                limit=ns_parser.n_window,
+                window=ns_parser.n_window,
                 export=ns_parser.export,
             )
 
@@ -586,7 +579,7 @@ class QaController(StockBaseController):
                 data=self.stock,
                 symbol=self.ticker,
                 target=self.target,
-                limit=ns_parser.n_window,
+                window=ns_parser.n_window,
                 quantile=ns_parser.f_quantile,
                 export=ns_parser.export,
             )
@@ -621,7 +614,7 @@ class QaController(StockBaseController):
         )
         if ns_parser:
             rolling_view.display_skew(
-                name=self.ticker,
+                symbol=self.ticker,
                 data=self.stock,
                 target=self.target,
                 window=ns_parser.n_window,
@@ -658,7 +651,7 @@ class QaController(StockBaseController):
         )
         if ns_parser:
             rolling_view.display_kurtosis(
-                name=self.ticker,
+                symbol=self.ticker,
                 data=self.stock,
                 target=self.target,
                 window=ns_parser.n_window,
@@ -716,7 +709,7 @@ class QaController(StockBaseController):
             "-r",
             "--fuller_reg",
             help="Type of regression.  Can be ‘c’,’ct’,’ctt’,’nc’ 'c' - Constant and t - trend order",
-            choices=["c", "ct", "ctt", "nc"],
+            choices=self.FULLER_REG,
             default="c",
             type=str,
             dest="fuller_reg",
@@ -725,7 +718,7 @@ class QaController(StockBaseController):
             "-k",
             "--kps_reg",
             help="Type of regression.  Can be ‘c’,’ct'",
-            choices=["c", "ct"],
+            choices=self.KPS_REG,
             type=str,
             dest="kpss_reg",
             default="c",
@@ -782,8 +775,18 @@ class QaController(StockBaseController):
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
         )
+        # This assumes all intervals convert from string to int well
+        # This should handle weekly and monthly because the merge would only
+        # Work on the intersections
+        interval = "".join(c for c in self.interval if c.isdigit())
         if ns_parser:
-            beta_view(self.ticker, ns_parser.ref, data=self.stock)
+            beta_view(
+                symbol=self.ticker,
+                ref_symbol=ns_parser.ref,
+                data=self.stock,
+                interval=interval,
+                export=ns_parser.export,
+            )
 
     @log_start_end(log=logger)
     def call_var(self, other_args: List[str]):
@@ -858,7 +861,7 @@ class QaController(StockBaseController):
                     ns_parser.use_mean,
                     ns_parser.adjusted,
                     ns_parser.student_t,
-                    ns_parser.percentile / 100,
+                    ns_parser.percentile,
                     ns_parser.data_range,
                     False,
                 )
@@ -870,9 +873,7 @@ class QaController(StockBaseController):
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             prog="es",
-            description="""
-                Provides Expected Shortfall (short: ES) of the selected stock.
-            """,
+            description="Provides Expected Shortfall (short: ES) of the selected stock.",
         )
         parser.add_argument(
             "-m",
@@ -885,9 +886,8 @@ class QaController(StockBaseController):
         parser.add_argument(
             "-d",
             "--dist",
-            "--distributions",
             dest="distributions",
-            type=str,
+            type=str.lower,
             choices=self.distributions,
             default="normal",
             help="Distribution used for the calculations",
@@ -900,7 +900,7 @@ class QaController(StockBaseController):
             type=float,
             default=99.9,
             help="""
-                Percentile used for ES calculations, for example input 99.9 equals a 99.9 Percent Expected Shortfall
+                Percentile for calculations, i.e. input 99.9 equals a 99.9 Percent Expected Shortfall
             """,
         )
 
@@ -911,7 +911,7 @@ class QaController(StockBaseController):
                 self.ticker,
                 ns_parser.use_mean,
                 ns_parser.distributions,
-                ns_parser.percentile / 100,
+                ns_parser.percentile,
                 False,
             )
 

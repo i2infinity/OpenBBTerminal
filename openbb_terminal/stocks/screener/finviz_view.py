@@ -125,7 +125,7 @@ d_cols_to_sort = {
 
 @log_start_end(log=logger)
 def screener(
-    loaded_preset: str,
+    loaded_preset: str = "top_gainers",
     data_type: str = "overview",
     limit: int = 10,
     ascend: bool = False,
@@ -250,5 +250,4 @@ def screener(
 
         return list(df_screen.head(n=limit)["Ticker"].values)
 
-    console.print("")
     return []

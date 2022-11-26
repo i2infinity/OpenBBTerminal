@@ -1,19 +1,22 @@
 """ Fred Model """
 __docformat__ = "numpy"
 
+import os
 import logging
 import textwrap
-from typing import Dict, List, Tuple
+from typing import List, Optional, Tuple
 from datetime import datetime, timedelta
 from requests import HTTPError
+
 
 import fred
 import pandas as pd
 import requests
 from fredapi import Fred
+import certifi
 
 from openbb_terminal import config_terminal as cfg
-from openbb_terminal.decorators import log_start_end
+from openbb_terminal.decorators import check_api_key, log_start_end
 from openbb_terminal.helper_funcs import get_user_agent
 from openbb_terminal.rich_config import console
 
@@ -21,7 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
-def check_series_id(series_id: str) -> Tuple[bool, Dict]:
+@check_api_key(["API_FRED_KEY"])
+def check_series_id(series_id: str) -> Tuple[bool, dict]:
     """Checks if series ID exists in fred
 
     Parameters
@@ -31,9 +35,8 @@ def check_series_id(series_id: str) -> Tuple[bool, Dict]:
 
     Returns
     -------
-    bool:
-        Boolean if series ID exists
-    dict:
+    Tuple[bool, Dict]
+        Boolean if series ID exists,
         Dictionary of series information
     """
     url = f"https://api.stlouisfed.org/fred/series?series_id={series_id}&api_key={cfg.API_FRED_KEY}&file_type=json"
@@ -62,16 +65,19 @@ def check_series_id(series_id: str) -> Tuple[bool, Dict]:
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_FRED_KEY"])
 def get_series_notes(search_query: str, limit: int = -1) -> pd.DataFrame:
     """Get series notes. [Source: FRED]
+
     Parameters
     ----------
     search_query : str
         Text query to search on fred series notes database
     limit : int
         Maximum number of series notes to display
+
     Returns
-    ----------
+    -------
     pd.DataFrame
         DataFrame of matched series
     """
@@ -97,14 +103,18 @@ def get_series_notes(search_query: str, limit: int = -1) -> pd.DataFrame:
         else:
             console.print("No matches found. \n")
 
-        df_fred["notes"] = df_fred["notes"].apply(
-            lambda x: "\n".join(textwrap.wrap(x, width=100))
-            if isinstance(x, str)
-            else x
-        )
-        df_fred["title"] = df_fred["title"].apply(
-            lambda x: "\n".join(textwrap.wrap(x, width=50)) if isinstance(x, str) else x
-        )
+        if "notes" in df_fred.columns:
+            df_fred["notes"] = df_fred["notes"].apply(
+                lambda x: "\n".join(textwrap.wrap(x, width=100))
+                if isinstance(x, str)
+                else x
+            )
+        if "title" in df_fred.columns:
+            df_fred["title"] = df_fred["title"].apply(
+                lambda x: "\n".join(textwrap.wrap(x, width=50))
+                if isinstance(x, str)
+                else x
+            )
 
         if limit != -1:
             df_fred = df_fred[:limit]
@@ -113,16 +123,19 @@ def get_series_notes(search_query: str, limit: int = -1) -> pd.DataFrame:
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_FRED_KEY"])
 def get_series_ids(search_query: str, limit: int = -1) -> pd.DataFrame:
     """Get Series IDs. [Source: FRED]
+
     Parameters
     ----------
     search_query : str
         Text query to search on fred series notes database
     limit : int
         Maximum number of series IDs to output
+
     Returns
-    ----------
+    -------
     pd.Dataframe
         Dataframe with series IDs and titles
     """
@@ -154,27 +167,34 @@ def get_series_ids(search_query: str, limit: int = -1) -> pd.DataFrame:
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_FRED_KEY"])
 def get_series_data(
-    series_id: str, start_date: str = None, end_date: str = None
+    series_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None
 ) -> pd.DataFrame:
     """Get Series data. [Source: FRED]
+
     Parameters
     ----------
     series_id : str
         Series ID to get data from
-    start_date : str
+    start_date : Optional[str]
         Start date to get data from, format yyyy-mm-dd
-    end_date : str
+    end_date : Optional[str]
         End data to get from, format yyyy-mm-dd
 
     Returns
-    ----------
+    -------
     pd.DataFrame
         Series data
     """
     df = pd.DataFrame()
 
     try:
+        # Necessary for installer so that it can locate the correct certificates for
+        # API calls and https
+        # https://stackoverflow.com/questions/27835619/urllib-and-ssl-certificate-verify-failed-error/73270162#73270162
+        os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+        os.environ["SSL_CERT_FILE"] = certifi.where()
         fredapi_client = Fred(cfg.API_FRED_KEY)
         df = fredapi_client.get_series(series_id, start_date, end_date)
     # Series does not exist & invalid api keys
@@ -185,10 +205,14 @@ def get_series_data(
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_FRED_KEY"])
 def get_aggregated_series_data(
-    series_ids: List[str], start_date: str = None, end_date: str = None, limit: int = -1
-) -> pd.DataFrame:
+    series_ids: List[str],
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[pd.DataFrame, dict]:
     """Get Series data. [Source: FRED]
+
     Parameters
     ----------
     series_ids : List[str]
@@ -197,13 +221,13 @@ def get_aggregated_series_data(
         Start date to get data from, format yyyy-mm-dd
     end_date : str
         End data to get from, format yyyy-mm-dd
-    limit: int
-        Number of raw data rows to show
 
     Returns
-    ----------
+    -------
     pd.DataFrame
         Series data
+    dict
+        Dictionary of series ids and titles
     """
 
     data = pd.DataFrame()
@@ -213,30 +237,27 @@ def get_aggregated_series_data(
         information = check_series_id(ids)
 
         if "seriess" in information:
-            detail[id] = {
+            detail[ids] = {
                 "title": information["seriess"][0]["title"],
                 "units": information["seriess"][0]["units_short"],
             }
 
     for s_id in series_ids:
-        data = pd.concat(
-            [
-                data,
-                pd.DataFrame(
-                    get_series_data(s_id, start_date, end_date), columns=[s_id]
-                ),
-            ],
-            axis=1,
-        )
 
-    if limit != -1:
-        data = data.tail(limit)
+        series = pd.DataFrame(
+            get_series_data(s_id, start_date, end_date), columns=[s_id]
+        ).dropna()
+
+        data[s_id] = series[s_id]
 
     return data, detail
 
 
 @log_start_end(log=logger)
-def get_yield_curve(date: datetime = None) -> Tuple[pd.DataFrame, str]:
+@check_api_key(["API_FRED_KEY"])
+def get_yield_curve(
+    date: datetime = None,
+) -> Tuple[pd.DataFrame, datetime]:
     """Gets yield curve data from FRED
 
     Parameters
@@ -246,11 +267,22 @@ def get_yield_curve(date: datetime = None) -> Tuple[pd.DataFrame, str]:
 
     Returns
     -------
-    pd.DataFrame:
-        Dataframe of yields and maturities
-    str
+    Tuple[pd.DataFrame, datetime]
+        Dataframe of yields and maturities,
         Date for which the yield curve is obtained
+
+    Examples
+    --------
+    >>> from openbb_terminal.sdk import openbb
+    >>> ycrv_df = openbb.economy.ycrv()
     """
+
+    # Necessary for installer so that it can locate the correct certificates for
+    # API calls and https
+    # https://stackoverflow.com/questions/27835619/urllib-and-ssl-certificate-verify-failed-error/73270162#73270162
+    # os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+    # os.environ["SSL_CERT_FILE"] = certifi.where()
+
     fredapi_client = Fred(cfg.API_FRED_KEY)
     fred_series = {
         "1Month": "DGS1MO",
@@ -290,7 +322,7 @@ def get_yield_curve(date: datetime = None) -> Tuple[pd.DataFrame, str]:
         date_of_yield = date
         series = df[df.index == date]
         if series.empty:
-            return pd.DataFrame(), date.strftime("%Y-%m-%d")
+            return pd.DataFrame(), date_of_yield
         rates = pd.DataFrame(series.values.T, columns=["Rate"])
 
     rates.insert(

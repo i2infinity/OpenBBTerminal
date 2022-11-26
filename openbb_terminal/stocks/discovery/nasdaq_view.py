@@ -43,15 +43,16 @@ def display_top_retail(limit: int = 3, export: str = ""):
             show_index=False,
             title=f"[bold]{date} Top Retail:[/bold]",
         )
+        console.print("")
 
     export_data(export, os.path.dirname(os.path.abspath(__file__)), "rtat", retails)
 
 
 @log_start_end(log=logger)
 def display_dividend_calendar(
-    date: str = datetime.today().strftime("%Y-%m-%d"),
+    date: str = None,
     sortby: str = "Dividend",
-    ascending: bool = False,
+    ascend: bool = False,
     limit: int = 10,
     export: str = "",
 ):
@@ -60,16 +61,20 @@ def display_dividend_calendar(
     Parameters
     ----------
     date: str
-        Date to get dividend calendar for
+        Date to get dividend calendar for, format YYYY-MM-DD
     sortby: str
         Column to sort data for
-    ascending: bool
+    ascend: bool
         Flag to sort in ascending order
     limit: int
         Number of results to show
     export: str
         Format to export data
     """
+
+    if date is None:
+        date = datetime.today().strftime("%Y-%m-%d")
+
     div_map = {
         "symbol": "Symbol",
         "companyName": "Name",
@@ -89,7 +94,7 @@ def display_dividend_calendar(
         return
     calendar = calendar.drop(columns=["announcement_Date"])
     calendar.columns = calendar.columns.map(div_map)
-    calendar = calendar.sort_values(by=sortby, ascending=ascending)
+    calendar = calendar.sort_values(by=sortby, ascending=ascend)
     print_rich_table(
         calendar.head(limit),
         headers=[x.title() for x in calendar.columns],

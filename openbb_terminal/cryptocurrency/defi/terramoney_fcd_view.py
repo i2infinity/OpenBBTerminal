@@ -23,21 +23,22 @@ from openbb_terminal.helper_funcs import (
     print_rich_table,
     is_valid_axes_count,
 )
+from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
 def display_account_staking_info(
-    address: str = "", top: int = 10, export: str = ""
+    address: str = "", limit: int = 10, export: str = ""
 ) -> None:
-    """Display staking info for provided terra account address [Source: https://fcd.terra.dev/swagger]
+    """Prints table showing staking info for provided terra account address [Source: https://fcd.terra.dev/swagger]
 
     Parameters
     ----------
     address: str
         terra blockchain address e.g. terra1jvwelvs7rdk6j3mqdztq5tya99w8lxk6l9hcqg
-    top: int
+    limit: int
         Number of records to display
     export : str
         Export dataframe data to csv,json,xlsx file
@@ -46,8 +47,10 @@ def display_account_staking_info(
     df, report = terramoney_fcd_model.get_staking_account_info(address)
     if not df.empty:
         print_rich_table(
-            df.head(top), headers=list(df.columns), show_index=False, title=report
+            df.head(limit), headers=list(df.columns), show_index=False, title=report
         )
+    else:
+        console.print(f"[red]No data found for address {address}\n[/red]")
 
     export_data(
         export,
@@ -59,13 +62,13 @@ def display_account_staking_info(
 
 @log_start_end(log=logger)
 def display_validators(
-    top: int = 10, sortby: str = "votingPower", ascend: bool = True, export: str = ""
+    limit: int = 10, sortby: str = "votingPower", ascend: bool = True, export: str = ""
 ) -> None:
-    """Display information about terra validators [Source: https://fcd.terra.dev/swagger]
+    """Prints table showing information about terra validators [Source: https://fcd.terra.dev/swagger]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data. Choose from:
@@ -87,7 +90,7 @@ def display_validators(
     ]
 
     print_rich_table(
-        df.head(top),
+        df.head(limit),
         headers=list(df.columns),
         floatfmt=".2f",
         show_index=False,
@@ -103,17 +106,17 @@ def display_validators(
 
 @log_start_end(log=logger)
 def display_gov_proposals(
-    top: int = 10,
+    limit: int = 10,
     status: str = "all",
     sortby: str = "id",
     ascend: bool = True,
     export: str = "",
 ) -> None:
-    """Display terra blockchain governance proposals list [Source: https://fcd.terra.dev/swagger]
+    """Prints table showing terra blockchain governance proposals list [Source: https://fcd.terra.dev/swagger]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     status: str
         status of proposal, one from list: ['Voting','Deposit','Passed','Rejected']
@@ -125,7 +128,7 @@ def display_gov_proposals(
         Export dataframe data to csv,json,xlsx file
     """
 
-    df = terramoney_fcd_model.get_proposals(status, sortby, ascend, top)
+    df = terramoney_fcd_model.get_proposals(status, sortby, ascend, limit)
 
     print_rich_table(df, headers=list(df.columns), floatfmt=".2f", show_index=False)
 
@@ -136,15 +139,15 @@ def display_gov_proposals(
 def display_account_growth(
     kind: str = "total",
     cumulative: bool = False,
-    top: int = 90,
+    limit: int = 90,
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ) -> None:
-    """Display terra blockchain account growth history [Source: https://fcd.terra.dev/swagger]
+    """Plots terra blockchain account growth history [Source: https://fcd.terra.dev/swagger]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     kind: str
         display total account count or active account count. One from list [active, total]
@@ -172,7 +175,7 @@ def display_account_growth(
     else:
         return
 
-    df = df.sort_values("date", ascending=False).head(top)
+    df = df.sort_values("date", ascending=False).head(limit)
     df = df.set_index("date")
 
     start, end = df.index[-1], df.index[0]
@@ -202,15 +205,15 @@ def display_account_growth(
 
 @log_start_end(log=logger)
 def display_staking_ratio_history(
-    top: int = 90,
+    limit: int = 90,
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ) -> None:
-    """Display terra blockchain staking ratio history [Source: https://fcd.terra.dev/v1]
+    """Plots terra blockchain staking ratio history [Source: https://fcd.terra.dev/v1]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     export : str
         Export dataframe data to csv,json,xlsx file
@@ -218,7 +221,7 @@ def display_staking_ratio_history(
         External axes (1 axis is expected in the list), by default None
     """
 
-    df = terramoney_fcd_model.get_staking_ratio_history(top)
+    df = terramoney_fcd_model.get_staking_ratio_history(limit)
 
     start, end = df.index[-1], df.index[0]
 
@@ -249,15 +252,15 @@ def display_staking_ratio_history(
 
 @log_start_end(log=logger)
 def display_staking_returns_history(
-    top: int = 90,
+    limit: int = 90,
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ) -> None:
-    """Display terra blockchain staking returns history [Source: https://fcd.terra.dev/swagger]
+    """Plots terra blockchain staking returns history [Source: https://fcd.terra.dev/swagger]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     export : str
         Export dataframe data to csv,json,xlsx file
@@ -273,7 +276,7 @@ def display_staking_returns_history(
     else:
         return
 
-    df = terramoney_fcd_model.get_staking_returns_history(top)
+    df = terramoney_fcd_model.get_staking_returns_history(limit)
 
     start, end = df.index[-1], df.index[0]
 

@@ -1,27 +1,80 @@
 """Yfinance options model"""
 __docformat__ = "numpy"
 
-import warnings
 import logging
 import math
-from datetime import datetime, date, timedelta
+import warnings
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
+import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from openbb_terminal.stocks.options.op_helpers import Option
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import get_rf
 from openbb_terminal.rich_config import console
+from openbb_terminal.stocks.options import op_helpers
+from openbb_terminal.stocks.options.op_helpers import Option
 
 logger = logging.getLogger(__name__)
 
 
+option_chain_cols = [
+    "strike",
+    "lastPrice",
+    "bid",
+    "ask",
+    "volume",
+    "openInterest",
+    "impliedVolatility",
+]
+
+option_chain_dict = {"openInterest": "openinterest", "impliedVolatility": "iv"}
+
+
+def get_full_option_chain(symbol: str) -> pd.DataFrame:
+    """Get all options for given ticker [Source: Yahoo Finance]
+
+    Parameters
+    ----------
+    symbol: str
+        Stock ticker symbol
+
+    Returns
+    -------
+    pd.Dataframe
+        Option chain
+    """
+    ticker = yf.Ticker(symbol)
+    dates = ticker.options
+
+    options = pd.DataFrame()
+
+    for _date in dates:
+        calls = ticker.option_chain(_date).calls
+        puts = ticker.option_chain(_date).puts
+        calls = calls[option_chain_cols].rename(columns=option_chain_dict)
+        puts = puts[option_chain_cols].rename(columns=option_chain_dict)
+        calls.columns = [x + "_c" if x != "strike" else x for x in calls.columns]
+        puts.columns = [x + "_p" if x != "strike" else x for x in puts.columns]
+
+        temp = pd.merge(calls, puts, how="outer", on="strike")
+        temp["expiration"] = _date
+        options = pd.concat([options, temp], axis=0).reset_index(drop=True)
+
+    return options
+
+
 # pylint: disable=W0640
 @log_start_end(log=logger)
-def get_full_option_chain(
-    symbol: str, expiration: str, calls: bool = True, puts: bool = True
+def get_option_chain_expiry(
+    symbol: str,
+    expiry: str,
+    min_sp: float = -1,
+    max_sp: float = -1,
+    calls: bool = True,
+    puts: bool = True,
 ) -> pd.DataFrame:
     """Get full option chains with calculated greeks
 
@@ -29,7 +82,7 @@ def get_full_option_chain(
     ----------
     symbol: str
         Stock ticker symbol
-    expiration: str
+    expiry: str
         Expiration date for chain in format YYY-mm-dd
     calls: bool
         Flag to get calls
@@ -43,9 +96,9 @@ def get_full_option_chain(
     """
     try:
         yf_ticker = yf.Ticker(symbol)
-        options = yf_ticker.option_chain(expiration)
+        options = yf_ticker.option_chain(expiry)
     except ValueError:
-        console.print(f"[red]{symbol} options for {expiration} not found.[/red]")
+        console.print(f"[red]{symbol} options for {expiry} not found.[/red]")
         return pd.DataFrame()
 
     last_price = yf_ticker.info["regularMarketPrice"]
@@ -71,10 +124,10 @@ def get_full_option_chain(
     if calls:
         df_list.append(call_df)
         option_factor.append(1)
-    df_list = [x[x["impliedVolatility"] > 0] for x in df_list]
+    df_list = [x[x["impliedVolatility"] > 0].copy() for x in df_list]
     # Add in greeks to each df
     # Time to expiration:
-    dt = (datetime.strptime(expiration, "%Y-%m-%d") - datetime.now()).seconds / (
+    dt = (datetime.strptime(expiry, "%Y-%m-%d") - datetime.now()).seconds / (
         60 * 60 * 24
     )
     # Note the way the Option class is defined, put has a -1 input and call has a +1 input
@@ -109,7 +162,20 @@ def get_full_option_chain(
             how="outer",
             suffixes=["_call", "_put"],
         )
+        # If min/max strike aren't provided, just get the middle 50% of strikes
+    if min_sp == -1:
+        min_strike = np.percentile(options_df["strike"], 25)
+    else:
+        min_strike = min_sp
 
+    if max_sp == -1:
+        max_strike = np.percentile(options_df["strike"], 75)
+    else:
+        max_strike = max_sp
+
+    options_df = options_df[
+        (options_df.strike >= min_strike) & (options_df.strike <= max_strike)
+    ]
     return options_df
 
 
@@ -156,7 +222,7 @@ def get_option_chain(symbol: str, expiry: str):
         chains = yf_ticker.option_chain(expiry)
     except Exception:
         console.print(f"[red]Error: Expiration {expiry} cannot be found.[/red]")
-        chains = pd.DataFrame()
+        chains = op_helpers.Chain(pd.DataFrame(), "yahoo")
 
     return chains
 
@@ -222,6 +288,10 @@ def generate_data(
     current_price: float, options: List[Dict[str, int]], underlying: int
 ) -> Tuple[List[float], List[float], List[float]]:
     """Gets x values, and y values before and after premiums"""
+
+    # Remove empty elements from options
+    options = [o for o in options if o]
+
     x_vals = get_x_values(current_price, options)
     base = current_price
     total_cost = sum(x["cost"] for x in options)
@@ -244,7 +314,7 @@ def get_price(symbol: str) -> float:
         The ticker symbol to get the price for
 
     Returns
-    ----------
+    -------
     price : float
         The price of the ticker
     """
@@ -265,7 +335,7 @@ def get_info(symbol: str):
         The ticker symbol to get the price for
 
     Returns
-    ----------
+    -------
     price : float
         The info for a given ticker
     """
@@ -283,7 +353,7 @@ def get_closing(symbol: str) -> pd.Series:
         The ticker symbol to get the price for
 
     Returns
-    ----------
+    -------
     price : List[float]
         A list of closing prices for a ticker
     """
@@ -329,7 +399,7 @@ def get_iv_surface(symbol: str) -> pd.DataFrame:
 @log_start_end(log=logger)
 def get_binom(
     symbol: str,
-    expiration: str,
+    expiry: str,
     strike: float = 0,
     put: bool = False,
     europe: bool = False,
@@ -341,7 +411,7 @@ def get_binom(
     ----------
     symbol : str
         The ticker symbol of the option's underlying asset
-    expiration : str
+    expiry : str
         The expiration for the option
     strike : float
         The strike price for the option
@@ -365,7 +435,7 @@ def get_binom(
     )
     delta_t = 1 / 252
     rf = get_rf()
-    exp_date = datetime.strptime(expiration, "%Y-%m-%d").date()
+    exp_date = datetime.strptime(expiry, "%Y-%m-%d").date()
     today = date.today()
     days = (exp_date - today).days
 
@@ -508,3 +578,41 @@ def get_greeks(
     df = pd.DataFrame(strikes, columns=columns)
 
     return df
+
+
+@log_start_end(log=logger)
+def get_vol(
+    symbol: str,
+    expiry: str,
+) -> pd.DataFrame:
+    """Plot volume
+
+    Parameters
+    ----------
+    symbol: str
+        Ticker symbol
+    expiry: str
+        expiration date for options
+    """
+    options = get_option_chain(symbol, expiry)
+
+    return options
+
+
+@log_start_end(log=logger)
+def get_volume_open_interest(
+    symbol: str,
+    expiry: str,
+) -> pd.DataFrame:
+    """Plot volume and open interest
+
+    Parameters
+    ----------
+    symbol: str
+        Stock ticker symbol
+    expiry: str
+        Option expiration
+    """
+    options = get_option_chain(symbol, expiry)
+
+    return options

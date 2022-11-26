@@ -8,8 +8,10 @@ import webbrowser
 from datetime import datetime
 from typing import List
 
+import numpy as np
 import pandas as pd
-from prompt_toolkit.completion import NestedCompleter
+
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.common.technical_analysis import (
@@ -25,6 +27,7 @@ from openbb_terminal.common.technical_analysis import (
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import (
     EXPORT_BOTH_RAW_DATA_AND_FIGURES,
+    check_non_negative,
     check_positive,
     check_positive_list,
     check_positive_float,
@@ -67,6 +70,7 @@ class TechnicalAnalysisController(CryptoBaseController):
     ]
 
     PATH = "/crypto/ta/"
+    CHOICES_GENERATION = True
 
     def __init__(
         self,
@@ -86,10 +90,32 @@ class TechnicalAnalysisController(CryptoBaseController):
         self.stock["Adj Close"] = stock["Close"]
 
         if session and obbff.USE_PROMPT_TOOLKIT:
-            choices: dict = {c: {} for c in self.controller_choices}
+            choices: dict = self.choices_default
 
-            choices["support"] = self.SUPPORT_CHOICES
-            choices["about"] = self.ABOUT_CHOICES
+            choices["load"] = {
+                "--interval": {
+                    c: {}
+                    for c in [
+                        "1",
+                        "5",
+                        "15",
+                        "30",
+                        "60",
+                        "240",
+                        "1440",
+                        "10080",
+                        "43200",
+                    ]
+                },
+                "-i": "--interval",
+                "--exchange": {c: {} for c in self.exchanges},
+                "--source": {c: {} for c in ["CCXT", "YahooFinance", "CoingGecko"]},
+                "--vs": {c: {} for c in ["usd", "eur"]},
+                "--start": None,
+                "-s": "--start",
+                "--end": None,
+                "-e": "--end",
+            }
 
             self.completer = NestedCompleter.from_nested_dict(choices)
 
@@ -99,7 +125,7 @@ class TechnicalAnalysisController(CryptoBaseController):
         mt = MenuText("crypto/ta/", 90)
         mt.add_param("_ticker", crypto_str)
         mt.add_raw("\n")
-        mt.add_cmd("tv", "TradingView")
+        mt.add_cmd("tv")
         mt.add_raw("\n")
         mt.add_info("_overlap_")
         mt.add_cmd("ema")
@@ -151,7 +177,6 @@ class TechnicalAnalysisController(CryptoBaseController):
             webbrowser.open(
                 f"https://www.tradingview.com/chart/?symbol={self.coin}usdt"
             )
-            console.print("")
 
     # COMMON
     # TODO: Go through all models and make sure all needed columns are in dfs
@@ -188,9 +213,11 @@ class TechnicalAnalysisController(CryptoBaseController):
             "--offset",
             action="store",
             dest="n_offset",
-            type=int,
+            type=check_non_negative,
             default=0,
             help="offset",
+            choices=range(0, 100),
+            metavar="N_OFFSET",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -203,7 +230,7 @@ class TechnicalAnalysisController(CryptoBaseController):
             overlap_view.view_ma(
                 ma_type="EMA",
                 symbol=self.coin,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -240,9 +267,11 @@ class TechnicalAnalysisController(CryptoBaseController):
             "--offset",
             action="store",
             dest="n_offset",
-            type=int,
+            type=check_non_negative,
             default=0,
             help="offset",
+            choices=range(0, 100),
+            metavar="N_OFFSET",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -255,7 +284,7 @@ class TechnicalAnalysisController(CryptoBaseController):
             overlap_view.view_ma(
                 ma_type="SMA",
                 symbol=self.coin,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -289,9 +318,11 @@ class TechnicalAnalysisController(CryptoBaseController):
             "--offset",
             action="store",
             dest="n_offset",
-            type=int,
+            type=check_non_negative,
             default=0,
             help="offset",
+            choices=range(0, 100),
+            metavar="N_OFFSET",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -304,7 +335,7 @@ class TechnicalAnalysisController(CryptoBaseController):
             overlap_view.view_ma(
                 ma_type="WMA",
                 symbol=self.coin,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -338,9 +369,11 @@ class TechnicalAnalysisController(CryptoBaseController):
             "--offset",
             action="store",
             dest="n_offset",
-            type=int,
+            type=check_non_negative,
             default=0,
             help="offset",
+            choices=range(0, 100),
+            metavar="N_OFFSET",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -353,7 +386,7 @@ class TechnicalAnalysisController(CryptoBaseController):
             overlap_view.view_ma(
                 ma_type="HMA",
                 symbol=self.coin,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -390,9 +423,11 @@ class TechnicalAnalysisController(CryptoBaseController):
             "--offset",
             action="store",
             dest="n_offset",
-            type=int,
+            type=check_non_negative,
             default=0,
             help="offset",
+            choices=range(0, 100),
+            metavar="N_OFFSET",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -405,7 +440,7 @@ class TechnicalAnalysisController(CryptoBaseController):
             overlap_view.view_ma(
                 ma_type="ZLMA",
                 symbol=self.coin,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -428,9 +463,11 @@ class TechnicalAnalysisController(CryptoBaseController):
             "--offset",
             action="store",
             dest="n_offset",
-            type=int,
+            type=check_non_negative,
             default=0,
             help="offset",
+            choices=range(0, 100),
+            metavar="N_OFFSET",
         )
         parser.add_argument(
             "--start",
@@ -464,7 +501,7 @@ class TechnicalAnalysisController(CryptoBaseController):
 
             overlap_view.view_vwap(
                 symbol=self.coin,
-                s_interval=interval_text,
+                interval=interval_text,
                 data=self.stock,
                 start_date=ns_parser.start,
                 end_date=ns_parser.end,
@@ -497,6 +534,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=14,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH",
         )
         parser.add_argument(
             "-s",
@@ -546,6 +585,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=12,
             help="The short period.",
+            choices=range(1, 100),
+            metavar="N_FAST",
         )
         parser.add_argument(
             "--slow",
@@ -570,7 +611,7 @@ class TechnicalAnalysisController(CryptoBaseController):
         if ns_parser:
             momentum_view.display_macd(
                 symbol=self.coin,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 n_fast=ns_parser.n_fast,
                 n_slow=ns_parser.n_slow,
                 n_signal=ns_parser.n_signal,
@@ -601,6 +642,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=14,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH",
         )
         parser.add_argument(
             "-s",
@@ -619,6 +662,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=1,
             help="drift",
+            choices=range(1, 100),
+            metavar="N_DRIFT",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -630,7 +675,7 @@ class TechnicalAnalysisController(CryptoBaseController):
         if ns_parser:
             momentum_view.display_rsi(
                 symbol=self.coin,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 scalar=ns_parser.n_scalar,
                 drift=ns_parser.n_drift,
@@ -661,6 +706,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=14,
             help="The time period of the fastk moving average",
+            choices=range(1, 100),
+            metavar="N_FASTKPERIOD",
         )
         parser.add_argument(
             "-d",
@@ -670,6 +717,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=3,
             help="The time period of the slowd moving average",
+            choices=range(1, 100),
+            metavar="N_SLOWDPERIOD",
         )
         parser.add_argument(
             "--slowkperiod",
@@ -678,6 +727,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=3,
             help="The time period of the slowk moving average",
+            choices=range(1, 100),
+            metavar="N_SLOWKPERIOD",
         )
 
         ns_parser = self.parse_known_args_and_warn(
@@ -716,6 +767,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=14,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -755,6 +808,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=14,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -766,7 +821,7 @@ class TechnicalAnalysisController(CryptoBaseController):
         if ns_parser:
             momentum_view.display_cg(
                 symbol=self.coin,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 export=ns_parser.export,
             )
@@ -792,6 +847,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=14,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH",
         )
         parser.add_argument(
             "-s",
@@ -810,6 +867,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=1,
             help="drift",
+            choices=range(1, 100),
+            metavar="N_DRIFT",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -857,6 +916,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=25,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH",
         )
         parser.add_argument(
             "-s",
@@ -912,6 +973,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=15,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH",
         )
         parser.add_argument(
             "-s",
@@ -921,6 +984,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive_float,
             default=2,
             help="std",
+            choices=np.arange(0.0, 10, 0.25).tolist(),
+            metavar="N_STD",
         )
         parser.add_argument(
             "-m",
@@ -928,6 +993,7 @@ class TechnicalAnalysisController(CryptoBaseController):
             action="store",
             dest="s_mamode",
             default="sma",
+            choices=volatility_model.MAMODES,
             help="mamode",
         )
 
@@ -971,6 +1037,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=20,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH_UPPER",
         )
         parser.add_argument(
             "-l",
@@ -980,6 +1048,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=20,
             help="length",
+            choices=range(1, 100),
+            metavar="N_LENGTH_LOWER",
         )
 
         ns_parser = self.parse_known_args_and_warn(
@@ -1017,6 +1087,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=20,
             help="Window length",
+            choices=range(1, 100),
+            metavar="N_LENGTH",
         )
         parser.add_argument(
             "-s",
@@ -1041,9 +1113,11 @@ class TechnicalAnalysisController(CryptoBaseController):
             "--offset",
             action="store",
             dest="n_offset",
-            type=int,
+            type=check_non_negative,
             default=0,
             help="offset",
+            choices=range(0, 100),
+            metavar="N_OFFSET",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -1133,6 +1207,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=check_positive,
             default=3,
             help="fast length",
+            choices=range(1, 100),
+            metavar="N_LENGTH_FAST",
         )
         parser.add_argument(
             "--slow",
@@ -1200,6 +1276,8 @@ class TechnicalAnalysisController(CryptoBaseController):
             type=int,
             help="Days to look back for retracement",
             default=120,
+            choices=range(1, 960),
+            metavar="PERIOD",
         )
         parser.add_argument(
             "--start",
@@ -1226,7 +1304,7 @@ class TechnicalAnalysisController(CryptoBaseController):
             custom_indicators_view.fibonacci_retracement(
                 symbol=self.coin,
                 data=self.stock,
-                period=ns_parser.period,
+                limit=ns_parser.period,
                 start_date=ns_parser.start,
                 end_date=ns_parser.end,
                 export=ns_parser.export,

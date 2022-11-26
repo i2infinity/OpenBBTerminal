@@ -1,7 +1,7 @@
 """Chartexchange model"""
-__docformat__ = "numpy"
 
 import logging
+from typing import Union
 
 import pandas as pd
 import requests
@@ -16,7 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
-def get_option_history(symbol: str, date: str, call: bool, price: str) -> pd.DataFrame:
+def get_option_history(
+    symbol: str = "GME",
+    date: str = "2021-02-05",
+    call: bool = True,
+    price: Union[str, Union[int, float]] = "90",
+) -> pd.DataFrame:
     """Historic prices for a specific option [chartexchange]
 
     Parameters
@@ -27,7 +32,7 @@ def get_option_history(symbol: str, date: str, call: bool, price: str) -> pd.Dat
         Date as a string YYYYMMDD
     call : bool
         Whether to show a call or a put
-    price : str
+    price : Union[str, Union[int, float]]
         Strike price for a specific option
 
     Returns

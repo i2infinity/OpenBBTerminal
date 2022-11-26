@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def dark_pool_short_positions(
     limit: int = 10,
     sortby: str = "dpp_dollar",
-    ascending: bool = False,
+    ascend: bool = False,
     export: str = "",
 ):
     """Get dark pool short positions. [Source: Stockgrid]
@@ -41,12 +41,12 @@ def dark_pool_short_positions(
         'sv_pct': Short Vol. %%, 'nsv': Net Short Vol. [1M],
         'nsv_dollar': Net Short Vol. ($100M), 'dpp': DP Position [1M],
         'dpp_dollar': DP Position ($1B)
-    ascending : bool
+    ascend : bool
         Data in ascending order
     export : str
         Export dataframe data to csv,json,xlsx file
     """
-    df = stockgrid_model.get_dark_pool_short_positions(sortby, ascending)
+    df = stockgrid_model.get_dark_pool_short_positions(sortby, ascend)
 
     dp_date = df["Date"].values[0]
     df = df.drop(columns=["Date"])
@@ -235,8 +235,6 @@ def short_interest_volume(
         if not external_axes:
             theme.visualize_output()
 
-    console.print("")
-
     export_data(
         export,
         os.path.dirname(os.path.abspath(__file__)),
@@ -297,6 +295,7 @@ def net_short_position(
         else:
             return
 
+        df = df.sort_values(by=["dates"])
         ax1.bar(
             df["dates"],
             df["Net Short Vol. (1k $)"],
@@ -328,8 +327,6 @@ def net_short_position(
 
         if not external_axes:
             theme.visualize_output()
-
-    console.print("")
 
     export_data(
         export,

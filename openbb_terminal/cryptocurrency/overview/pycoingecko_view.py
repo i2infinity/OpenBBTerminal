@@ -35,7 +35,7 @@ register_matplotlib_converters()
 @log_start_end(log=logger)
 def display_crypto_heatmap(
     category: str = "",
-    top: int = 15,
+    limit: int = 15,
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ) -> None:
@@ -45,14 +45,14 @@ def display_crypto_heatmap(
     ----------
     caterogy: str
         Category (e.g., stablecoins). Empty for no category (default: )
-    top: int
+    limit: int
         Number of top cryptocurrencies to display
     export: str
         Export dataframe data to csv,json,xlsx
     external_axes : Optional[List[plt.Axes]], optional
         External axes (1 axis is expected in the list), by default None
     """
-    df = gecko.get_coins(top, category)
+    df = gecko.get_coins(limit, category)
     if df.empty:
         console.print("\nNo cryptocurrencies found\n")
     else:
@@ -88,12 +88,17 @@ def display_crypto_heatmap(
             axis=1,
         )
 
+        # index needs to get sorted - was matching with different values
+        df.sort_index(inplace=True)
+        df_copy.sort_index(inplace=True)
         squarify.plot(
             df["market_cap"],
-            alpha=0.8,
+            alpha=0.5,
             color=colors,
         )
+
         text_sizes = squarify.normalize_sizes(df["market_cap"], 100, 100)
+
         rects = squarify.squarify(text_sizes, 0, 0, 100, 100)
         for la, r in zip(df_copy["symbol"], rects):
             x, y, dx, dy = r["x"], r["y"], r["dx"], r["dy"]
@@ -110,7 +115,7 @@ def display_crypto_heatmap(
                     * 0.8
                 ),
             )
-        ax.set_title(f"Top {top} Cryptocurrencies {category_str}")
+        ax.set_title(f"Top {limit} Cryptocurrencies {category_str}")
         ax.set_axis_off()
 
         cfg.theme.style_primary_axis(ax)
@@ -128,7 +133,7 @@ def display_crypto_heatmap(
 
 @log_start_end(log=logger)
 def display_holdings_overview(
-    symbol: str, show_bar: bool = False, export: str = "", top: int = 15
+    symbol: str, show_bar: bool = False, export: str = "", limit: int = 15
 ) -> None:
     """Shows overview of public companies that holds ethereum or bitcoin. [Source: CoinGecko]
 
@@ -140,7 +145,7 @@ def display_holdings_overview(
         Whether to show a bar graph for the data
     export: str
         Export dataframe data to csv,json,xlsx
-    top: int
+    limit: int
         The number of rows to show
     """
 
@@ -148,7 +153,7 @@ def display_holdings_overview(
     stats_string = res[0]
     df = res[1]
 
-    df = df.head(top)
+    df = df.head(limit)
 
     if df.empty:
         console.print("\nZero companies holding this crypto\n")
@@ -158,8 +163,10 @@ def display_holdings_overview(
 
             for _, row in df.iterrows():
                 ax.bar(x=row["Symbol"], height=row["Total Holdings"])
-
-            ax.set_ylabel("BTC Number")
+            if symbol == "bitcoin":
+                ax.set_ylabel("BTC Number")
+            else:
+                ax.set_ylabel("ETH Number")
             ax.get_yaxis().set_major_formatter(
                 ticker.FuncFormatter(
                     lambda x, _: lambda_long_number_format_with_type_check(x)
@@ -167,7 +174,10 @@ def display_holdings_overview(
             )
             ax.set_xlabel("Company Symbol")
             fig.tight_layout(pad=8)
-            ax.set_title("Total BTC Holdings per company")
+            if symbol == "bitcoin":
+                ax.set_title("Total BTC Holdings per company")
+            else:
+                ax.set_title("Total ETH Holdings per company")
             ax.tick_params(axis="x", labelrotation=90)
         console.print(f"\n{stats_string}\n")
         df = df.applymap(lambda x: lambda_long_number_format_with_type_check(x))
@@ -188,13 +198,13 @@ def display_holdings_overview(
 
 @log_start_end(log=logger)
 def display_exchange_rates(
-    sortby: str = "Name", ascend: bool = False, top: int = 15, export: str = ""
+    sortby: str = "Name", ascend: bool = False, limit: int = 15, export: str = ""
 ) -> None:
     """Shows  list of crypto, fiats, commodity exchange rates. [Source: CoinGecko]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -208,7 +218,7 @@ def display_exchange_rates(
 
     if not df.empty:
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Exchange Rates",
@@ -221,9 +231,7 @@ def display_exchange_rates(
             df,
         )
     else:
-        console.print("")
         console.print("Unable to retrieve data from CoinGecko.")
-        console.print("")
 
 
 @log_start_end(log=logger)
@@ -286,9 +294,7 @@ def display_global_market_info(pie: bool = False, export: str = "") -> None:
             df,
         )
     else:
-        console.print("")
         console.print("Unable to retrieve data from CoinGecko.")
-        console.print("")
 
 
 @log_start_end(log=logger)
@@ -318,65 +324,55 @@ def display_global_defi_info(export: str = "") -> None:
             df,
         )
     else:
-        console.print("")
         console.print("Unable to retrieve data from CoinGecko.")
-        console.print("")
 
 
 @log_start_end(log=logger)
 def display_stablecoins(
-    top: int = 15,
+    limit: int = 15,
     export: str = "",
-    sortby: str = "rank",
+    sortby: str = "Market_Cap_[$]",
     ascend: bool = False,
-    pie: bool = False,
+    pie: bool = True,
 ) -> None:
     """Shows stablecoins data [Source: CoinGecko]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     sortby: str
-        Key by which to sort data
+        Key by which to sort data, default is Market_Cap_[$]
     ascend: bool
         Flag to sort data ascending
+    pie: bool
+        Whether to show a pie chart, default is True
     export : str
         Export dataframe data to csv,json,xlsx file
     pie : bool
         Whether to show a pie chart
+
+    Examples
+    --------
+    >>> from openbb_terminal.sdk import openbb
+    >>> openbb.crypto.ov.stables_chart(sortby="Volume_[$]", ascend=True, limit=10)
     """
 
-    df = gecko.get_stable_coins(top, sortby=sortby, ascend=ascend)
+    df = gecko.get_stable_coins(limit, sortby=sortby, ascend=ascend)
 
     if not df.empty:
-        total_market_cap = int(df["market_cap"].sum())
-        df[f"Percentage [%] of top {top}"] = (df["market_cap"] / total_market_cap) * 100
-        df_data = df
-        df = df.set_axis(
-            [
-                "Symbol",
-                "Name",
-                "Price [$]",
-                "Market Cap [$]",
-                "Market Cap Rank",
-                "Change 24h [%]",
-                "Change 7d [%]",
-                "Volume [$]",
-                f"Percentage [%] of top {top}",
-            ],
-            axis=1,
-            inplace=False,
-        )
-        df = df.applymap(lambda x: lambda_long_number_format_with_type_check(x))
+
+        total_market_cap = int(df["Market_Cap_[$]"].sum())
+        df.columns = df.columns.str.replace("_", " ")
+
         if pie:
-            stables_to_display = df_data[df_data[f"Percentage [%] of top {top}"] >= 1]
-            other_stables = df_data[df_data[f"Percentage [%] of top {top}"] < 1]
+            stables_to_display = df[df[f"Percentage [%] of top {limit}"] >= 1]
+            other_stables = df[df[f"Percentage [%] of top {limit}"] < 1]
             values_list = list(
-                stables_to_display[f"Percentage [%] of top {top}"].values
+                stables_to_display[f"Percentage [%] of top {limit}"].values
             )
-            values_list.append(other_stables[f"Percentage [%] of top {top}"].sum())
-            labels_list = list(stables_to_display["name"].values)
+            values_list.append(other_stables[f"Percentage [%] of top {limit}"].sum())
+            labels_list = list(stables_to_display["Name"].values)
             labels_list.append("Others")
             _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
             ax.pie(
@@ -387,17 +383,20 @@ def display_stablecoins(
                 autopct="%1.0f%%",
                 startangle=90,
             )
-            ax.set_title(f"Market cap distribution of top {top} Stablecoins")
+            ax.set_title(f"Market cap distribution of top {limit} Stablecoins")
             if obbff.USE_ION:
                 plt.ion()
             plt.show()
+
         console.print(
-            f"First {top} stablecoins have a total "
+            f"First {limit} stablecoins have a total "
             f"{lambda_long_number_format_with_type_check(total_market_cap)}"
-            "dollars of market cap."
+            "dollars of market cap.\n"
         )
+
+        df = df.applymap(lambda x: lambda_long_number_format_with_type_check(x))
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Stablecoin Data",
@@ -415,7 +414,10 @@ def display_stablecoins(
 
 @log_start_end(log=logger)
 def display_categories(
-    sortby: str = "market_cap_desc", top: int = 15, export: str = "", pie: bool = False
+    sortby: str = "market_cap_desc",
+    limit: int = 15,
+    export: str = "",
+    pie: bool = False,
 ) -> None:
     """Shows top cryptocurrency categories by market capitalization
 
@@ -425,7 +427,7 @@ def display_categories(
     ----------
     sortby: str
         Key by which to sort data
-    top: int
+    limit: int
         Number of records to display
     export: str
         Export dataframe data to csv,json,xlsx file
@@ -437,13 +439,13 @@ def display_categories(
     df_data = df
     if not df.empty:
         if pie:
-            df_data[f"% relative to top {top}"] = (
+            df_data[f"% relative to top {limit}"] = (
                 df_data["Market Cap"] / df_data["Market Cap"].sum()
             ) * 100
-            stables_to_display = df_data[df_data[f"% relative to top {top}"] >= 1]
-            other_stables = df_data[df_data[f"% relative to top {top}"] < 1]
-            values_list = list(stables_to_display[f"% relative to top {top}"].values)
-            values_list.append(other_stables[f"% relative to top {top}"].sum())
+            stables_to_display = df_data[df_data[f"% relative to top {limit}"] >= 1]
+            other_stables = df_data[df_data[f"% relative to top {limit}"] < 1]
+            values_list = list(stables_to_display[f"% relative to top {limit}"].values)
+            values_list.append(other_stables[f"% relative to top {limit}"].sum())
             labels_list = list(stables_to_display["Name"].values)
             labels_list.append("Others")
             _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
@@ -454,13 +456,13 @@ def display_categories(
                 autopct="%1.0f%%",
                 startangle=90,
             )
-            ax.set_title(f"Market Cap distribution of top {top} crypto categories")
+            ax.set_title(f"Market Cap distribution of top {limit} crypto categories")
             if obbff.USE_ION:
                 plt.ion()
             plt.show()
         df = df.applymap(lambda x: lambda_long_number_format_with_type_check(x))
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             floatfmt=".2f",
             show_index=False,
@@ -478,9 +480,9 @@ def display_categories(
 
 @log_start_end(log=logger)
 def display_exchanges(
-    sortby: str = "name",
+    sortby: str = "Rank",
     ascend: bool = False,
-    top: int = 15,
+    limit: int = 15,
     links: bool = False,
     export: str = "",
 ) -> None:
@@ -488,7 +490,7 @@ def display_exchanges(
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -510,7 +512,7 @@ def display_exchanges(
             df.drop("Url", axis=1, inplace=True)
 
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Top CoinGecko Exchanges",
@@ -523,20 +525,18 @@ def display_exchanges(
             df,
         )
     else:
-        console.print("")
         console.print("Unable to retrieve data from CoinGecko.")
-        console.print("")
 
 
 @log_start_end(log=logger)
 def display_platforms(
-    sortby: str = "Name", ascend: bool = True, top: int = 15, export: str = ""
+    sortby: str = "Name", ascend: bool = True, limit: int = 15, export: str = ""
 ) -> None:
     """Shows list of financial platforms. [Source: CoinGecko]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -550,7 +550,7 @@ def display_platforms(
 
     if not df.empty:
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Financial Platforms",
@@ -568,13 +568,13 @@ def display_platforms(
 
 @log_start_end(log=logger)
 def display_products(
-    sortby: str = "Platform", ascend: bool = False, top: int = 15, export: str = ""
+    sortby: str = "Platform", ascend: bool = False, limit: int = 15, export: str = ""
 ) -> None:
     """Shows list of financial products. [Source: CoinGecko]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -588,7 +588,7 @@ def display_products(
 
     if not df.empty:
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Financial Products",
@@ -601,20 +601,18 @@ def display_products(
             df,
         )
     else:
-        console.print("")
         console.print("Unable to retrieve data from CoinGecko.")
-        console.print("")
 
 
 @log_start_end(log=logger)
 def display_indexes(
-    sortby: str = "Name", ascend: bool = True, top: int = 15, export: str = ""
+    sortby: str = "Name", ascend: bool = True, limit: int = 15, export: str = ""
 ) -> None:
     """Shows list of crypto indexes. [Source: CoinGecko]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -627,7 +625,7 @@ def display_indexes(
     df = gecko.get_indexes(sortby=sortby, ascend=ascend)
     if not df.empty:
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Crypto Indexes",
@@ -640,20 +638,18 @@ def display_indexes(
             df,
         )
     else:
-        console.print("")
         console.print("Unable to retrieve data from CoinGecko.")
-        console.print("")
 
 
 @log_start_end(log=logger)
 def display_derivatives(
-    sortby: str = "Rank", ascend: bool = False, top: int = 15, export: str = ""
+    sortby: str = "Rank", ascend: bool = False, limit: int = 15, export: str = ""
 ) -> None:
     """Shows  list of crypto derivatives. [Source: CoinGecko]
 
     Parameters
     ----------
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -668,7 +664,7 @@ def display_derivatives(
     if not df.empty:
 
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Crypto Derivatives",
@@ -681,6 +677,4 @@ def display_derivatives(
             df,
         )
     else:
-        console.print("")
         console.print("Unable to retrieve data from CoinGecko.")
-        console.print("")

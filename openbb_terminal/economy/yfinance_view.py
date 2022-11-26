@@ -42,7 +42,8 @@ def show_indices(
     Parameters
     ----------
     indices: list
-        A list of indices you wish to load (and plot). Available indices can be accessed through get_available_indices().
+        A list of indices you wish to load (and plot).
+        Available indices can be accessed through economy.available_indices().
     interval: str
         Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
         Intraday data cannot extend last 60 days
@@ -61,7 +62,7 @@ def show_indices(
     export : str
         Export data to csv,json,xlsx or png,jpg,pdf,svg file
     Returns
-    ----------
+    -------
     Plots the Series.
     """
 
@@ -141,7 +142,7 @@ def search_indices(query: list, limit: int = 10):
     limit: int
         The amount of views you want to show, by default this is set to 10.
     Returns
-    ----------
+    -------
     Shows a rich table with the available options.
     """
 

@@ -3,7 +3,8 @@ __docformat__ = "numpy"
 import configparser
 import datetime
 import logging
-import os
+from pathlib import Path
+from typing import List, Tuple
 import random
 
 import numpy as np
@@ -16,6 +17,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from openbb_terminal.decorators import log_start_end
 
+from openbb_terminal.core.config.paths import USER_PRESETS_DIRECTORY
 from openbb_terminal.rich_config import console
 from openbb_terminal.stocks.screener import finviz_model
 
@@ -23,7 +25,20 @@ logger = logging.getLogger(__name__)
 
 register_matplotlib_converters()
 
-presets_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "presets/")
+PRESETS_PATH = USER_PRESETS_DIRECTORY / "stocks" / "screener"
+PRESETS_PATH_DEFAULT = Path(__file__).parent / "presets"
+preset_choices = {
+    filepath.name: filepath
+    for filepath in PRESETS_PATH.iterdir()
+    if filepath.suffix == ".ini"
+}
+preset_choices.update(
+    {
+        filepath.name: filepath
+        for filepath in PRESETS_PATH_DEFAULT.iterdir()
+        if filepath.suffix == ".ini"
+    }
+)
 
 d_candle_types = {
     "o": "Open",
@@ -36,14 +51,14 @@ d_candle_types = {
 
 @log_start_end(log=logger)
 def historical(
-    preset_loaded: str,
+    preset_loaded: str = "top_gainers",
     limit: int = 10,
     start_date: str = (
         datetime.datetime.now() - datetime.timedelta(days=6 * 30)
     ).strftime("%Y-%m-%d"),
     type_candle: str = "a",
     normalize: bool = True,
-):
+) -> Tuple[pd.DataFrame, List[str], bool]:
     """View historical price of stocks that meet preset
 
     Parameters
@@ -75,7 +90,9 @@ def historical(
     else:
         preset_filter = configparser.RawConfigParser()
         preset_filter.optionxform = str  # type: ignore
-        preset_filter.read(presets_path + preset_loaded + ".ini")
+        if preset_loaded not in preset_choices:
+            return pd.DataFrame, [], False
+        preset_filter.read(preset_choices[preset_loaded])
 
         d_general = preset_filter["General"]
         d_filters = {
@@ -94,9 +111,12 @@ def historical(
     l_stocks = screen.screener_view(verbose=0)
     limit_random_stocks = False
 
-    df_screener = pd.DataFrame()
+    final_screener = pd.DataFrame()
 
     if l_stocks:
+        if len(l_stocks) < 2:
+            console.print("Please select two or more tickers.\n")
+            return pd.DataFrame(), [], False
         if len(l_stocks) > limit:
             random.shuffle(l_stocks)
             l_stocks = sorted(l_stocks[:limit])
@@ -106,25 +126,29 @@ def historical(
             )
             limit_random_stocks = True
 
+        selector = d_candle_types[type_candle]
         df_screener = yf.download(
             l_stocks, start=start_date, progress=False, threads=False
-        )[d_candle_types[type_candle]][l_stocks]
-        df_screener = df_screener[l_stocks]
+        )[selector]
+        clean_screener = df_screener[l_stocks]
+        final_screener = clean_screener[l_stocks]
 
-        if np.any(df_screener.isna()):
-            nan_tickers = df_screener.columns[df_screener.isna().sum() >= 1].to_list()
+        if np.any(final_screener.isna()):
+            nan_tickers = final_screener.columns[
+                final_screener.isna().sum() >= 1
+            ].to_list()
             console.print(
                 f"NaN values found in: {', '.join(nan_tickers)}.  Replacing with zeros."
             )
-            df_screener = df_screener.fillna(0)
+            final_screener = final_screener.fillna(0)
 
         # This puts everything on 0-1 scale for visualizing
         if normalize:
             mm_scale = MinMaxScaler()
-            df_screener = pd.DataFrame(
-                mm_scale.fit_transform(df_screener),
-                columns=df_screener.columns,
-                index=df_screener.index,
+            final_screener = pd.DataFrame(
+                mm_scale.fit_transform(final_screener),
+                columns=final_screener.columns,
+                index=final_screener.index,
             )
 
-    return df_screener, l_stocks, limit_random_stocks
+    return final_screener, l_stocks, limit_random_stocks

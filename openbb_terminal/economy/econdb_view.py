@@ -1,7 +1,6 @@
 """ EconDB View """
 __docformat__ = "numpy"
 # pylint:disable=too-many-arguments
-from datetime import datetime
 import logging
 import os
 from textwrap import fill
@@ -26,9 +25,10 @@ logger = logging.getLogger(__name__)
 def show_macro_data(
     parameters: list = None,
     countries: list = None,
+    transform: str = "",
     start_date: str = "1900-01-01",
-    end_date: str = str(datetime.today().date()),
-    currency: str = "",
+    end_date: Optional[str] = None,
+    symbol: str = "",
     raw: bool = False,
     external_axes: Optional[List[plt.axes]] = None,
     export: str = "",
@@ -41,11 +41,19 @@ def show_macro_data(
         The type of data you wish to display. Available parameters can be accessed through get_macro_parameters().
     countries : list
         The selected country or countries. Available countries can be accessed through get_macro_countries().
+    transform : str
+        select data transformation from:
+            '' - no transformation
+            'TPOP' - total percentage change on period,
+            'TOYA' - total percentage since 1 year ago,
+            'TUSD' - level USD,
+            'TPGP' - Percentage of GDP,
+            'TNOR' - Start = 100
     start_date : str
         The starting date, format "YEAR-MONTH-DAY", i.e. 2010-12-31.
-    end_date : str
+    end_date : Optional[str]
         The end date, format "YEAR-MONTH-DAY", i.e. 2020-06-05.
-    currency : str
+    symbol : str
         In what currency you wish to convert all values.
     raw : bool
         Whether to display the raw output.
@@ -55,7 +63,7 @@ def show_macro_data(
         Export data to csv,json,xlsx or png,jpg,pdf,svg file
 
     Returns
-    ----------
+    -------
     Plots the Series.
     """
 
@@ -65,7 +73,7 @@ def show_macro_data(
         countries = ["United_States"]
 
     df_rounded, units, denomination = econdb_model.get_aggregated_macro_data(
-        parameters, countries, start_date, end_date, currency
+        parameters, countries, transform, start_date, end_date, symbol
     )
 
     if external_axes is None:
@@ -100,7 +108,7 @@ def show_macro_data(
 
     if len(parameters) > 1 or len(countries) > 1:
         ax.legend(
-            [fill(label, 45) for label in legend],
+            [fill(label.title(), 45) for label in legend],
             bbox_to_anchor=(0, 0.40, 1, -0.52),
             loc="upper right",
             mode="expand",
@@ -139,7 +147,7 @@ def show_treasuries(
     maturities: list = None,
     frequency: str = "monthly",
     start_date: str = "1900-01-01",
-    end_date: str = str(datetime.today().date()),
+    end_date: Optional[str] = None,
     raw: bool = False,
     external_axes: Optional[List[plt.axes]] = None,
     export: str = "",
@@ -150,14 +158,14 @@ def show_treasuries(
     ----------
     instruments: list
         Type(s) of treasuries, nominal, inflation-adjusted or secondary market.
-        Available options can be accessed through get_treasury_maturities().
+        Available options can be accessed through economy.treasury_maturities().
     maturities : list
-        Treasury maturities to display. Available options can be accessed through get_treasury_maturities().
+        Treasury maturities to display. Available options can be accessed through economy.treasury_maturities().
     frequency : str
         Frequency of the data, this can be daily, weekly, monthly or annually
     start_date : str
         Starting date, format "YEAR-MONTH-DAY", i.e. 2010-12-31.
-    end_date : str
+    end_date : Optional[str]
         End date, format "YEAR-MONTH-DAY", i.e. 2020-06-05.
     raw : bool
         Whether to display the raw output.
@@ -167,7 +175,7 @@ def show_treasuries(
         Export data to csv,json,xlsx or png,jpg,pdf,svg file
 
     Returns
-    ----------
+    -------
     Plots the Treasury Series.
     """
 
@@ -228,7 +236,7 @@ def show_treasury_maturities():
     """Get treasury maturity options [Source: EconDB]
 
     Returns
-    ----------
+    -------
     A table containing the instruments and maturities.
     """
 

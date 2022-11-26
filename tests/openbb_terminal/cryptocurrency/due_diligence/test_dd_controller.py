@@ -1,4 +1,5 @@
 # IMPORTATION STANDARD
+from typing import List
 import os
 
 # IMPORTATION THIRDPARTY
@@ -13,6 +14,8 @@ from openbb_terminal.cryptocurrency.due_diligence import dd_controller
 # pylint: disable=E1111
 
 MESSARI_TIMESERIES_DF = pd.DataFrame()
+
+TOKENTERMINAL_PROJECTS: List[str] = list()
 
 COIN_MAP_DF = pd.Series(
     data={
@@ -71,6 +74,14 @@ def test_menu_with_queue(expected, mocker, queue):
         target=f"{path_controller}.messari_model.get_available_timeseries",
         return_value=MESSARI_TIMESERIES_DF,
     )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_exchanges",
+        return_value=["ABC"],
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
+    )
     result_menu = dd_controller.DueDiligenceController(queue=queue).menu()
 
     assert result_menu == expected
@@ -92,6 +103,10 @@ def test_menu_without_queue_completion(mocker):
         target="openbb_terminal.parent_classes.session.prompt",
         return_value="quit",
     )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_exchanges",
+        return_value=["ABC"],
+    )
 
     # DISABLE AUTO-COMPLETION : CONTROLLER.COMPLETER
     mocker.patch.object(
@@ -112,7 +127,22 @@ def test_menu_without_queue_completion(mocker):
         return_value=MESSARI_TIMESERIES_DF,
     )
 
-    result_menu = dd_controller.DueDiligenceController(queue=None).menu()
+    # MOCK TOKEN TERMINAL get_project_ids
+    mocker.patch(
+        target=f"{path_controller}.tokenterminal_model.get_project_ids",
+        return_value=TOKENTERMINAL_PROJECTS,
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
+    )
+
+    controller = dd_controller.DueDiligenceController(
+        symbol="BTC",
+        queue=None,
+    )
+
+    result_menu = controller.menu()
 
     assert result_menu == ["help"]
 
@@ -144,6 +174,14 @@ def test_menu_without_queue_sys_exit(mock_input, mocker):
         target=f"{path_controller}.messari_model.get_available_timeseries",
         return_value=MESSARI_TIMESERIES_DF,
     )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_exchanges",
+        return_value=["ABC"],
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
+    )
 
     # MOCK SWITCH
     class SystemExitSideEffect:
@@ -161,6 +199,14 @@ def test_menu_without_queue_sys_exit(mock_input, mocker):
         target=f"{path_controller}.DueDiligenceController.switch",
         new=mock_switch,
     )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_exchanges",
+        return_value=["ABC"],
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
+    )
 
     result_menu = dd_controller.DueDiligenceController(queue=None).menu()
 
@@ -176,6 +222,14 @@ def test_print_help(mocker):
     mocker.patch(
         target=f"{path_controller}.messari_model.get_available_timeseries",
         return_value=MESSARI_TIMESERIES_DF,
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_exchanges",
+        return_value=["ABC"],
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
     )
     controller = dd_controller.DueDiligenceController(queue=None)
     controller.print_help()
@@ -204,6 +258,15 @@ def test_switch(an_input, expected_queue, mocker):
         target=f"{path_controller}.messari_model.get_available_timeseries",
         return_value=MESSARI_TIMESERIES_DF,
     )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_exchanges",
+        return_value=["ABC"],
+    )
+
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
+    )
     controller = dd_controller.DueDiligenceController(queue=None)
     queue = controller.switch(an_input=an_input)
 
@@ -221,7 +284,15 @@ def test_call_cls(mocker):
         target=f"{path_controller}.messari_model.get_available_timeseries",
         return_value=MESSARI_TIMESERIES_DF,
     )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_exchanges",
+        return_value=["ABC"],
+    )
 
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
+    )
     controller = dd_controller.DueDiligenceController(queue=None)
     controller.call_cls([])
 
@@ -262,6 +333,13 @@ def test_call_func_expect_queue(expected_queue, func, queue, mocker):
     mocker.patch(
         target=f"{path_controller}.messari_model.get_available_timeseries",
         return_value=MESSARI_TIMESERIES_DF,
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_exchanges", return_value=["BITCOIN"]
     )
     controller = dd_controller.DueDiligenceController(queue=queue)
     result = getattr(controller, func)([])
@@ -306,6 +384,13 @@ def test_call_func_expect_queue(expected_queue, func, queue, mocker):
             "call_fundrate",
             [],
             "coinglass_view.display_funding_rate",
+            [],
+            dict(),
+        ),
+        (
+            "call_liquidations",
+            [],
+            "coinglass_view.display_liquidations",
             [],
             dict(),
         ),
@@ -455,10 +540,13 @@ def test_call_func(
         return_value=True,
     )
 
-    # MOCK GET_COINPAPRIKA_ID
     mocker.patch(
-        target=f"{path_controller}.cryptocurrency_helpers.get_coinpaprika_id",
-        return_value=True,
+        target=f"{path_controller}.ccxt_model.get_exchanges",
+        return_value=["ABC"],
+    )
+    mocker.patch(
+        target=f"{path_controller}.ccxt_model.get_binance_currencies",
+        return_value=["BITCOIN"],
     )
 
     # MOCK SHOW_AVAILABLE_PAIRS_FOR_GIVEN_SYMBOL

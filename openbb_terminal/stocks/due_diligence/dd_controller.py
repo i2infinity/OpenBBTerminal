@@ -6,7 +6,8 @@ import logging
 from typing import List
 
 from pandas.core.frame import DataFrame
-from prompt_toolkit.completion import NestedCompleter
+
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.decorators import log_start_end
@@ -18,7 +19,6 @@ from openbb_terminal.helper_funcs import (
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import StockBaseController
 from openbb_terminal.rich_config import console, MenuText
-from openbb_terminal.stocks import stocks_helper
 from openbb_terminal.stocks.due_diligence import (
     ark_view,
     business_insider_view,
@@ -48,6 +48,8 @@ class DueDiligenceController(StockBaseController):
         "arktrades",
     ]
     PATH = "/stocks/dd/"
+    ESTIMATE_CHOICES = ["annualrevenue", "annualearnings", "quarterearnings"]
+    CHOICES_GENERATION = True
 
     def __init__(
         self,
@@ -66,9 +68,8 @@ class DueDiligenceController(StockBaseController):
         self.stock = stock
 
         if session and obbff.USE_PROMPT_TOOLKIT:
-            choices: dict = {c: {} for c in self.controller_choices}
-            choices["load"]["-i"] = {c: {} for c in stocks_helper.INTERVALS}
-            choices["load"]["-s"] = {c: {} for c in stocks_helper.SOURCES}
+            choices: dict = self.choices_default
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def print_help(self):
@@ -78,15 +79,15 @@ class DueDiligenceController(StockBaseController):
         mt.add_raw("\n")
         mt.add_param("_ticker", self.ticker.upper())
         mt.add_raw("\n")
-        mt.add_cmd("analyst", "Finviz")
-        mt.add_cmd("rating", "FMP")
-        mt.add_cmd("rot", "Finnhub")
-        mt.add_cmd("pt", "Business Insider")
-        mt.add_cmd("est", "Business Insider")
-        mt.add_cmd("sec", "Market Watch")
-        mt.add_cmd("supplier", "Csimarket")
-        mt.add_cmd("customer", "Csimarket")
-        mt.add_cmd("arktrades", "Cathiesark")
+        mt.add_cmd("analyst")
+        mt.add_cmd("rating")
+        mt.add_cmd("rot")
+        mt.add_cmd("pt")
+        mt.add_cmd("est")
+        mt.add_cmd("sec")
+        mt.add_cmd("supplier")
+        mt.add_cmd("customer")
+        mt.add_cmd("arktrades")
         console.print(text=mt.menu_text, menu="Stocks - Due Diligence")
 
     def custom_reset(self) -> List[str]:
@@ -161,13 +162,21 @@ class DueDiligenceController(StockBaseController):
             description="""Yearly estimates and quarter earnings/revenues.
             [Source: Business Insider]""",
         )
-
+        parser.add_argument(
+            "-e",
+            "--estimate",
+            help="Estimates to get",
+            dest="estimate",
+            choices=self.ESTIMATE_CHOICES,
+            default="annualearnings",
+        )
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
         )
         if ns_parser:
             business_insider_view.estimates(
                 symbol=self.ticker,
+                estimate=ns_parser.estimate,
                 export=ns_parser.export,
             )
 

@@ -3,7 +3,7 @@ __docformat__ = "numpy"
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 import matplotlib.pyplot as plt
@@ -21,6 +21,7 @@ from openbb_terminal.helper_funcs import (
 )
 from openbb_terminal.rich_config import console
 from openbb_terminal.stocks.due_diligence import business_insider_model
+from openbb_terminal.stocks.stocks_helper import load
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,9 @@ register_matplotlib_converters()
 
 @log_start_end(log=logger)
 def price_target_from_analysts(
-    data: DataFrame,
-    symbol: str = "",
-    start_date: str = datetime.now().strftime("%Y-%m-%d"),
+    symbol: str,
+    data: Optional[DataFrame] = None,
+    start_date: Optional[str] = None,
     limit: int = 10,
     raw: bool = False,
     export: str = "",
@@ -41,12 +42,12 @@ def price_target_from_analysts(
 
     Parameters
     ----------
-    data: DataFrame
-        Due diligence stock dataframe
     symbol: str
         Due diligence ticker symbol
-    start_date : str
-        Start date of the stock data
+    data: Optional[DataFrame]
+        Price target DataFrame
+    start_date : Optional[str]
+        Start date of the stock data, format YYYY-MM-DD
     limit : int
         Number of latest price targets from analysts to print
     raw: bool
@@ -55,7 +56,18 @@ def price_target_from_analysts(
         Export dataframe data to csv,json,xlsx file
     external_axes: Optional[List[plt.Axes]], optional
         External axes (1 axis is expected in the list), by default None
+
+    Examples
+    --------
+    >>> from openbb_terminal.sdk import openbb
+    >>> openbb.stocks.dd.pt_chart(symbol="AAPL")
     """
+
+    if start_date is None:
+        start_date = (datetime.now() - timedelta(days=1100)).strftime("%Y-%m-%d")
+
+    if data is None:
+        data = load(symbol=symbol, start_date=start_date)
 
     df_analyst_data = business_insider_model.get_price_target_from_analysts(symbol)
     if df_analyst_data.empty:
@@ -85,19 +97,15 @@ def price_target_from_analysts(
         if start_date:
             df_analyst_data = df_analyst_data[start_date:]  # type: ignore
 
-        if "Adj Close" in data:
-            plot_column = "Adj Close"
-            legend_price_label = "Adjust Close"
-        else:
-            plot_column = "Close"
-            legend_price_label = "Close"
+        plot_column = "Close"
+        legend_price_label = "Close"
 
         ax.plot(data.index, data[plot_column].values)
 
         if start_date:
-            ax.plot(df_analyst_data.groupby(by=["Date"]).mean()[start_date:])  # type: ignore
+            ax.plot(df_analyst_data.groupby(by=["Date"]).mean(numeric_only=True)[start_date:])  # type: ignore
         else:
-            ax.plot(df_analyst_data.groupby(by=["Date"]).mean())
+            ax.plot(df_analyst_data.groupby(by=["Date"]).mean(numeric_only=True))
 
         ax.scatter(
             df_analyst_data.index,
@@ -118,8 +126,6 @@ def price_target_from_analysts(
         if not external_axes:
             theme.visualize_output()
 
-    console.print("")
-
     export_data(
         export,
         os.path.dirname(os.path.abspath(__file__)),
@@ -129,13 +135,15 @@ def price_target_from_analysts(
 
 
 @log_start_end(log=logger)
-def estimates(symbol: str, export: str = ""):
+def estimates(symbol: str, estimate: str, export: str = ""):
     """Display analysts' estimates for a given ticker. [Source: Business Insider]
 
     Parameters
     ----------
     symbol : str
         Ticker to get analysts' estimates
+    estimate: str
+        Type of estimate to get
     export : str
         Export dataframe data to csv,json,xlsx file
     """
@@ -145,42 +153,48 @@ def estimates(symbol: str, export: str = ""):
         df_quarter_revenues,
     ) = business_insider_model.get_estimates(symbol)
 
-    print_rich_table(
-        df_year_estimates,
-        headers=list(df_year_estimates.columns),
-        show_index=True,
-        title="Annual Earnings Estimates",
-    )
+    if estimate == "annualearnings":
 
-    print_rich_table(
-        df_quarter_earnings,
-        headers=list(df_quarter_earnings.columns),
-        show_index=True,
-        title="Quarterly Earnings Estimates",
-    )
+        print_rich_table(
+            df_year_estimates,
+            headers=list(df_year_estimates.columns),
+            show_index=True,
+            title="Annual Earnings Estimates",
+        )
+        export_data(
+            export,
+            os.path.dirname(os.path.abspath(__file__)),
+            "pt_year",
+            df_year_estimates,
+        )
 
-    print_rich_table(
-        df_quarter_revenues,
-        headers=list(df_quarter_revenues.columns),
-        show_index=True,
-        title="Quarterly Revenue Estimates",
-    )
+    elif estimate == "quarterearnings":
+        print_rich_table(
+            df_quarter_earnings,
+            headers=list(df_quarter_earnings.columns),
+            show_index=True,
+            title="Quarterly Earnings Estimates",
+        )
+        export_data(
+            export,
+            os.path.dirname(os.path.abspath(__file__)),
+            "pt_qtr_earnings",
+            df_quarter_earnings,
+        )
 
-    export_data(
-        export,
-        os.path.dirname(os.path.abspath(__file__)),
-        "pt_year",
-        df_year_estimates,
-    )
-    export_data(
-        export,
-        os.path.dirname(os.path.abspath(__file__)),
-        "pt_qtr_earnings",
-        df_quarter_earnings,
-    )
-    export_data(
-        export,
-        os.path.dirname(os.path.abspath(__file__)),
-        "pt_qtr_revenues",
-        df_quarter_revenues,
-    )
+    elif estimate == "annualrevenue":
+        print_rich_table(
+            df_quarter_revenues,
+            headers=list(df_quarter_revenues.columns),
+            show_index=True,
+            title="Quarterly Revenue Estimates",
+        )
+
+        export_data(
+            export,
+            os.path.dirname(os.path.abspath(__file__)),
+            "pt_qtr_revenues",
+            df_quarter_revenues,
+        )
+    else:
+        console.print("[red]Invalid estimate type[/red]")

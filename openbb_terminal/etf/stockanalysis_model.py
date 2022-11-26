@@ -1,13 +1,13 @@
 """Stockanalysis.com/etf Model"""
 __docformat__ = "numpy"
 
-import json
 import logging
 from typing import List, Tuple
+import json
 
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup as bs
+from bs4 import BeautifulSoup
 
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import get_user_agent
@@ -21,20 +21,26 @@ def get_all_names_symbols() -> Tuple[List[str], List[str]]:
 
     Returns
     -------
-    etf_symbols: List[str]:
-        List of all available etf symbols
-    etf_names: List[str]
-        List of all available etf names
+    Tuple[List[str], List[str]]
+        List of all available etf symbols, List of all available etf names
     """
+
+    etf_symbols = []
+    etf_names = []
+
     r = requests.get(
         "https://stockanalysis.com/etf/", headers={"User-Agent": get_user_agent()}
     )
-    soup2 = bs(r.text, "html.parser")
-    script = soup2.find("script", {"type": "application/json"})
 
-    etfs = pd.DataFrame(json.loads(script.string)["data"])
-    etf_symbols = etfs.s.to_list()
-    etf_names = etfs.n.to_list()
+    r = requests.get(
+        "https://stockanalysis.com/etf/", headers={"User-Agent": "Mozilla/5.0"}
+    )
+    soup = BeautifulSoup(r.text, "html.parser")
+    # If thesre is an error, check the following line
+    s4 = soup.findAll("script")[4]
+    data = pd.DataFrame(json.loads(s4.text)[1]["data"]["data"])
+    etf_symbols = data.s.to_list()
+    etf_names = data.n.to_list()
     return etf_symbols, etf_names
 
 
@@ -48,7 +54,7 @@ def get_etf_overview(symbol: str) -> pd.DataFrame:
         Etf symbol to get overview for
 
     Returns
-    ----------
+    -------
     df : pd.DataFrame
         Dataframe of stock overview data
     """
@@ -56,7 +62,7 @@ def get_etf_overview(symbol: str) -> pd.DataFrame:
         f"https://stockanalysis.com/etf/{symbol}",
         headers={"User-Agent": get_user_agent()},
     )
-    soup = bs(r.text, "html.parser")
+    soup = BeautifulSoup(r.text, "html.parser")
     tables = soup.findAll("table")
     texts = []
     for tab in tables[:2]:
@@ -91,10 +97,10 @@ def get_etf_holdings(symbol: str) -> pd.DataFrame:
     r = requests.get(link, headers={"User-Agent": get_user_agent()})
     try:
         df = pd.read_html(r.content)[0]
-        df["Symbol"] = df["Symbol"].fillna("n/a")
+        df["Symbol"] = df["Symbol"].fillna("N/A")
         df = df.set_index("Symbol")
-        df = df[["% Assets", "Shares"]]
-        df = df.rename(columns={"% Assets": "% Of Etf"})
+        df = df[["Name", "% Weight", "Shares"]]
+        df = df.rename(columns={"% Weight": "% Of Etf"})
     except ValueError:
         df = pd.DataFrame()
     return df
@@ -110,7 +116,7 @@ def compare_etfs(symbols: List[str]) -> pd.DataFrame:
         ETF symbols to compare
 
     Returns
-    ----------
+    -------
     df_compare : pd.DataFrame
         Dataframe of etf comparisons
     """

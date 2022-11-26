@@ -11,7 +11,6 @@ import finviz
 import matplotlib.pyplot as plt
 import pandas as pd
 import praw
-from tqdm import tqdm
 import seaborn as sns
 
 from openbb_terminal.common.behavioural_analysis import reddit_model
@@ -32,10 +31,19 @@ logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
+@check_api_key(
+    [
+        "API_REDDIT_CLIENT_ID",
+        "API_REDDIT_CLIENT_SECRET",
+        "API_REDDIT_USERNAME",
+        "API_REDDIT_USER_AGENT",
+        "API_REDDIT_PASSWORD",
+    ]
+)
 def print_and_record_reddit_post(
     submissions_dict: Dict, submission: praw.models.reddit.submission.Submission
 ):
-    """Prints reddit submission
+    """Prints reddit submission.
 
     Parameters
     ----------
@@ -67,8 +75,8 @@ def print_and_record_reddit_post(
         "awards": s_all_awards,
     }
     # Print post data collected so far
-    console.print(f"{s_datetime} - {submission.title}")
-    console.print(f"{s_link}")
+    console.print(f"[yellow]{s_datetime}[/yellow] - {submission.title}")
+    console.print(f"[blue]{s_link}[/blue]\n")
     columns = ["Subreddit", "Flair", "Score", "# Comments", "Upvote %", "Awards"]
     data = [
         submission.subreddit,
@@ -94,8 +102,50 @@ def print_and_record_reddit_post(
         "API_REDDIT_PASSWORD",
     ]
 )
+def print_reddit_post(sub: tuple):
+    """Prints reddit submission.
+
+    Parameters
+    ----------
+    sub : tuple
+        Row from submissions dataframe
+    """
+
+    sub_list = list(sub[1])
+    date = sub_list[0]
+    title = sub_list[3]
+    link = sub_list[-1]
+    console.print(f"[yellow]{date}[/yellow] - {title}")
+    console.print(f"[blue]{link}[/blue]\n")
+    columns = [
+        "Subreddit",
+        "Flair",
+        "Score",
+        "# Comments",
+        "Upvote %",
+        "Awards",
+    ]
+
+    print_rich_table(
+        pd.DataFrame(sub[1][columns]).T,
+        headers=columns,
+        show_index=False,
+        title="Reddit Submission",
+    )
+
+
+@log_start_end(log=logger)
+@check_api_key(
+    [
+        "API_REDDIT_CLIENT_ID",
+        "API_REDDIT_CLIENT_SECRET",
+        "API_REDDIT_USERNAME",
+        "API_REDDIT_USER_AGENT",
+        "API_REDDIT_PASSWORD",
+    ]
+)
 def display_watchlist(limit: int = 5):
-    """Print other users watchlist. [Source: Reddit]
+    """Prints other users watchlist. [Source: Reddit].
 
     Parameters
     ----------
@@ -106,6 +156,8 @@ def display_watchlist(limit: int = 5):
     if subs:
         for sub in subs:
             print_and_record_reddit_post({}, sub)
+            console.print("")
+
         if n_flair_posts_found > 0:
             lt_watchlist_sorted = sorted(
                 d_watchlist_tickers.items(), key=lambda item: item[1], reverse=True
@@ -143,7 +195,7 @@ def display_watchlist(limit: int = 5):
 def display_popular_tickers(
     limit: int = 10, post_limit: int = 50, subreddits: str = "", export: str = ""
 ):
-    """Print latest popular tickers. [Source: Reddit]
+    """Prints table showing latest popular tickers. [Source: Reddit].
 
     Parameters
     ----------
@@ -186,7 +238,7 @@ def display_popular_tickers(
     ]
 )
 def display_spac_community(limit: int = 10, popular: bool = False):
-    """Look at tickers mentioned in r/SPACs [Source: Reddit]
+    """Prints tickers mentioned in r/SPACs [Source: Reddit].
 
     Parameters
     ----------
@@ -196,9 +248,10 @@ def display_spac_community(limit: int = 10, popular: bool = False):
         Search by popular instead of new
     """
     subs, d_watchlist_tickers = reddit_model.get_spac_community(limit, popular)
-    if subs:
-        for sub in subs:
-            print_and_record_reddit_post({}, sub)
+    if not subs.empty:
+        for sub in subs.iterrows():
+            print_reddit_post(sub)
+            console.print("")
 
         if d_watchlist_tickers:
             lt_watchlist_sorted = sorted(
@@ -223,7 +276,6 @@ def display_spac_community(limit: int = 10, popular: bool = False):
                     "The following stock tickers have been mentioned more than once across the previous SPACs:"
                 )
                 console.print(s_watchlist_tickers[:-2])
-        console.print("")
 
 
 @log_start_end(log=logger)
@@ -237,7 +289,7 @@ def display_spac_community(limit: int = 10, popular: bool = False):
     ]
 )
 def display_spac(limit: int = 5):
-    """Look at posts containing 'spac' in top communities
+    """Prints posts containing 'spac' in top communities.
 
     Parameters
     ----------
@@ -246,9 +298,10 @@ def display_spac(limit: int = 5):
     """
     warnings.filterwarnings("ignore")  # To avoid printing the warning
     subs, d_watchlist_tickers, n_flair_posts_found = reddit_model.get_spac(limit)
-    if subs:
-        for sub in subs:
-            print_and_record_reddit_post({}, sub)
+    if not subs.empty:
+        for sub in subs.iterrows():
+            print_reddit_post(sub)
+            console.print("")
 
         if n_flair_posts_found > 0:
             lt_watchlist_sorted = sorted(
@@ -271,7 +324,6 @@ def display_spac(limit: int = 5):
                     "The following stock tickers have been mentioned more than once across the previous SPACs:"
                 )
                 console.print(s_watchlist_tickers[:-2])
-        console.print("")
 
 
 @log_start_end(log=logger)
@@ -285,7 +337,7 @@ def display_spac(limit: int = 5):
     ]
 )
 def display_wsb_community(limit: int = 10, new: bool = False):
-    """Show WSB posts
+    """Prints WSB posts.
 
     Parameters
     ----------
@@ -295,9 +347,10 @@ def display_wsb_community(limit: int = 10, new: bool = False):
         Flag to sort by new instead of hot, by default False
     """
     subs = reddit_model.get_wsb_community(limit, new)
-    if subs:
-        for sub in subs:
-            print_and_record_reddit_post({}, sub)
+    if not subs.empty:
+        for sub in subs.iterrows():
+            print_reddit_post(sub)
+            console.print("")
 
 
 @log_start_end(log=logger)
@@ -313,7 +366,7 @@ def display_wsb_community(limit: int = 10, new: bool = False):
 def display_due_diligence(
     symbol: str, limit: int = 10, n_days: int = 3, show_all_flairs: bool = False
 ):
-    """Display Reddit due diligence data for a given ticker
+    """Prints Reddit due diligence data for a given ticker.
 
     Parameters
     ----------
@@ -327,11 +380,12 @@ def display_due_diligence(
         Search through all flairs (apart from Yolo and Meme)
     """
     subs = reddit_model.get_due_dilligence(symbol, limit, n_days, show_all_flairs)
-    if subs:
-        for sub in subs:
-            print_and_record_reddit_post({}, sub)
-        if not subs:
-            console.print(f"No DD posts found for {symbol}\n")
+    if not subs.empty:
+        for sub in subs.iterrows():
+            print_reddit_post(sub)
+            console.print("")
+    else:
+        console.print(f"No DD posts found for {symbol}\n")
 
 
 @log_start_end(log=logger)
@@ -344,7 +398,7 @@ def display_due_diligence(
         "API_REDDIT_PASSWORD",
     ]
 )
-def display_reddit_sent(
+def display_redditsent(
     symbol: str,
     sortby: str = "relevance",
     limit: int = 100,
@@ -356,7 +410,8 @@ def display_reddit_sent(
     export: str = "",
     external_axes: Optional[List[plt.Axes]] = None,
 ):
-    """Determine Reddit sentiment about a search term
+    """Plots Reddit sentiment about a search term. Prints table showing if display is True.
+
     Parameters
     ----------
     symbol: str
@@ -381,29 +436,13 @@ def display_reddit_sent(
         If supplied, expect 1 external axis
     """
 
-    posts = reddit_model.get_posts_about(symbol, limit, sortby, time_frame, subreddits)
-    post_data = []
-    polarity_scores = []
+    df, polarity_scores, avg_polarity = reddit_model.get_posts_about(
+        symbol, limit, sortby, time_frame, full_search, subreddits
+    )
 
-    if not posts:
+    if df.empty:
         console.print(f"No posts for {symbol} found")
         return
-
-    console.print("Analyzing each post...")
-    for p in tqdm(posts):
-        texts = [p.title, p.selftext]
-        if full_search:
-            tlcs = reddit_model.get_comments(p)
-            texts.extend(tlcs)
-        preprocessed_text = reddit_model.clean_reddit_text(texts)
-        sentiment = reddit_model.get_sentiment(preprocessed_text)
-        polarity_scores.append(sentiment)
-        post_data.append([p.title, sentiment])
-
-    avg_polarity = sum(polarity_scores) / len(polarity_scores)
-
-    columns = ["Title", "Polarity Score"]
-    df = pd.DataFrame(post_data, columns=columns)
 
     if display:
         print_rich_table(df=df)

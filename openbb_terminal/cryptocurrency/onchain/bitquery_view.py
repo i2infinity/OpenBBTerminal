@@ -7,6 +7,9 @@ import os
 from openbb_terminal.cryptocurrency.dataframe_helpers import (
     lambda_very_long_number_formatter,
 )
+from openbb_terminal.cryptocurrency.dataframe_helpers import (
+    prettify_column_names,
+)
 from openbb_terminal.cryptocurrency.onchain import bitquery_model
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import export_data, print_rich_table
@@ -20,13 +23,13 @@ logger = logging.getLogger(__name__)
 def display_dex_trades(
     trade_amount_currency: str = "USD",
     kind: str = "dex",
-    top: int = 20,
+    limit: int = 20,
     days: int = 90,
     sortby: str = "tradeAmount",
     ascend: bool = True,
     export: str = "",
 ) -> None:
-    """Trades on Decentralized Exchanges aggregated by DEX or Month
+    """Prints table showing Trades on Decentralized Exchanges aggregated by DEX or Month
     [Source: https://graphql.bitquery.io/]
 
     Parameters
@@ -35,7 +38,7 @@ def display_dex_trades(
         Aggregate trades by dex or time
     trade_amount_currency: str
         Currency of displayed trade amount. Default: USD
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -58,12 +61,15 @@ def display_dex_trades(
     if not df.empty:
         df_data = df.copy()
 
-        df[["tradeAmount", "trades"]] = df[["tradeAmount", "trades"]].applymap(
+        column_names = ["tradeAmount", "trades"]
+        column_names = prettify_column_names(column_names)
+
+        df[column_names] = df[column_names].applymap(
             lambda x: lambda_very_long_number_formatter(x)
         )
 
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Trades on Decentralized Exchanges",
@@ -81,22 +87,22 @@ def display_dex_trades(
 @check_api_key(["API_BITQUERY_KEY"])
 def display_daily_volume_for_given_pair(
     symbol: str = "WBTC",
-    vs: str = "USDT",
-    top: int = 20,
+    to_symbol: str = "USDT",
+    limit: int = 20,
     sortby: str = "date",
     ascend: bool = True,
     export: str = "",
 ) -> None:
-    """Display daily volume for given pair
+    """Prints table showing daily volume for given pair
     [Source: https://graphql.bitquery.io/]
 
     Parameters
     ----------
     symbol: str
         ERC20 token symbol or address
-    vs: str
+    to_symbol: str
         Quote currency.
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -113,8 +119,8 @@ def display_daily_volume_for_given_pair(
 
     df = bitquery_model.get_daily_dex_volume_for_given_pair(
         symbol=symbol,
-        vs=vs,
-        limit=top,
+        to_symbol=to_symbol,
+        limit=limit,
         sortby=sortby,
         ascend=ascend,
     )
@@ -124,12 +130,19 @@ def display_daily_volume_for_given_pair(
 
     df_data = df.copy()
 
-    df[["tradeAmount", "trades"]] = df[["tradeAmount", "trades"]].applymap(
+    df[["Trade amount", "Trades"]] = df[["Trade amount", "Trades"]].applymap(
         lambda x: lambda_very_long_number_formatter(x)
     )
-
+    # The -d command takes the place of what would normally be -l. This means
+    # we want to print out all of the data from each --day. If there is
+    # more exchange data per day then we will have more than -d amount of
+    # rows. If we do not change this value then only -d amount of rows will
+    # be printed out, not -d amount of days which is what we want. So we set
+    # this to an arbitrary amount to cover the potential for more than
+    # one row per day
+    limit = 10
     print_rich_table(
-        df.head(top),
+        df.head(limit),
         headers=list(df.columns),
         show_index=False,
         title="Daily Volume for Pair",
@@ -148,12 +161,12 @@ def display_daily_volume_for_given_pair(
 def display_dex_volume_for_token(
     symbol: str = "WBTC",
     trade_amount_currency: str = "USD",
-    top: int = 10,
+    limit: int = 10,
     sortby: str = "tradeAmount",
     ascend: bool = True,
     export: str = "",
 ) -> None:
-    """Display token volume on different Decentralized Exchanges.
+    """Prints table showing token volume on different Decentralized Exchanges.
     [Source: https://graphql.bitquery.io/]
 
     Parameters
@@ -162,7 +175,7 @@ def display_dex_volume_for_token(
         ERC20 token symbol or address
     trade_amount_currency: str
         Currency of displayed trade amount. Default: USD
-    top: int
+    limit: int
         Number of records to display
     sortby: str
         Key by which to sort data
@@ -170,6 +183,7 @@ def display_dex_volume_for_token(
         Flag to sort data ascending
     export : str
         Export dataframe data to csv,json,xlsx file
+
     Returns
     -------
     pd.DataFrame
@@ -184,12 +198,16 @@ def display_dex_volume_for_token(
     )
     if not df.empty:
         df_data = df.copy()
-        df[["tradeAmount", "trades"]] = df[["tradeAmount", "trades"]].applymap(
+
+        column_names = ["tradeAmount", "trades"]
+        column_names = prettify_column_names(column_names)
+
+        df[column_names] = df[column_names].applymap(
             lambda x: lambda_very_long_number_formatter(x)
         )
 
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Token Volume on Exchanges",
@@ -212,8 +230,8 @@ def display_ethereum_unique_senders(
     ascend: bool = True,
     export: str = "",
 ) -> None:
-    """Display number of unique ethereum addresses which made a transaction in given time interval
-     [Source: https://graphql.bitquery.io/]
+    """Prints table showing number of unique ethereum addresses which made a transaction in given time interval
+    [Source: https://graphql.bitquery.io/]
 
     Parameters
     ----------
@@ -230,6 +248,7 @@ def display_ethereum_unique_senders(
         Flag to sort data ascending
     export : str
         Export dataframe data to csv,json,xlsx file
+
     Returns
     -------
     pd.DataFrame
@@ -238,9 +257,13 @@ def display_ethereum_unique_senders(
 
     df = bitquery_model.get_ethereum_unique_senders(interval, limit, sortby, ascend)
     if not df.empty:
-        df[["uniqueSenders", "transactions", "maximumGasPrice"]] = df[
-            ["uniqueSenders", "transactions", "maximumGasPrice"]
-        ].applymap(lambda x: lambda_very_long_number_formatter(x))
+
+        column_names = ["uniqueSenders", "transactions", "maximumGasPrice"]
+        column_names = prettify_column_names(column_names)
+
+        df[column_names] = df[column_names].applymap(
+            lambda x: lambda_very_long_number_formatter(x)
+        )
 
         df_data = df.copy()
 
@@ -262,21 +285,21 @@ def display_ethereum_unique_senders(
 @log_start_end(log=logger)
 @check_api_key(["API_BITQUERY_KEY"])
 def display_most_traded_pairs(
-    exchange="Uniswap",
+    exchange: str = "Uniswap",
     days: int = 10,
-    top: int = 10,
+    limit: int = 10,
     sortby: str = "tradeAmount",
     ascend: bool = True,
     export: str = "",
 ) -> None:
-    """Display most traded crypto pairs on given decentralized exchange in chosen time period.
-     [Source: https://graphql.bitquery.io/]
+    """Prints table showing most traded crypto pairs on given decentralized exchange in chosen time period.
+    [Source: https://graphql.bitquery.io/]
 
     Parameters
     ----------
-    exchange:
+    exchange: str
         Decentralized exchange name
-    days:
+    days: int
         Number of days taken into calculation account.
     sortby: str
         Key by which to sort data
@@ -284,6 +307,7 @@ def display_most_traded_pairs(
         Flag to sort data ascending
     export : str
         Export dataframe data to csv,json,xlsx file
+
     Returns
     -------
     pd.DataFrame
@@ -295,12 +319,16 @@ def display_most_traded_pairs(
     )
     if not df.empty:
         df_data = df.copy()
-        df[["tradeAmount", "trades"]] = df[["tradeAmount", "trades"]].applymap(
+
+        column_names = ["tradeAmount", "trades"]
+        column_names = prettify_column_names(column_names)
+
+        df[column_names] = df[column_names].applymap(
             lambda x: lambda_very_long_number_formatter(x)
         )
 
         print_rich_table(
-            df.head(top),
+            df.head(limit),
             headers=list(df.columns),
             show_index=False,
             title="Most Traded Crypto Pairs",
@@ -317,24 +345,24 @@ def display_most_traded_pairs(
 @log_start_end(log=logger)
 @check_api_key(["API_BITQUERY_KEY"])
 def display_spread_for_crypto_pair(
-    symbol="ETH",
-    vs="USDC",
-    days: int = 10,
+    symbol: str = "WETH",
+    to_symbol: str = "USDT",
+    limit: int = 10,
     sortby: str = "date",
     ascend: bool = True,
     export: str = "",
 ) -> None:
-    """Display an average bid and ask prices, average spread for given crypto pair for chosen
+    """Prints table showing an average bid and ask prices, average spread for given crypto pair for chosen
     time period. [Source: https://graphql.bitquery.io/]
 
     Parameters
     ----------
-    days:  int
-        Last n days to query data
     symbol: str
         ERC20 token symbol
-    vs: str
+    to_symbol: str
         Quoted currency.
+    limit:  int
+        Last n days to query data
     sortby: str
         Key by which to sort data
     ascend: bool
@@ -349,7 +377,7 @@ def display_spread_for_crypto_pair(
     """
 
     df = bitquery_model.get_spread_for_crypto_pair(
-        symbol=symbol, vs=vs, limit=days, sortby=sortby, ascend=ascend
+        symbol=symbol, to_symbol=to_symbol, limit=limit, sortby=sortby, ascend=ascend
     )
     if not df.empty:
 

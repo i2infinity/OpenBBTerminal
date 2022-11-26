@@ -9,13 +9,15 @@ import logging
 import os
 import subprocess  # nosec
 import sys
-from typing import List
+from typing import List, Union
+from packaging import version
 
 # IMPORTATION THIRDPARTY
 import requests
 import matplotlib.pyplot as plt
 
 # IMPORTATION INTERNAL
+from openbb_terminal.config_terminal import LOGGING_APP_NAME, LOGGING_COMMIT_HASH
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal import thought_of_the_day as thought
 from openbb_terminal.rich_config import console
@@ -45,23 +47,31 @@ def print_goodbye():
     # "...when offered a flight to the moon, nobody asks about what seat."
 
     console.print(
-        "OpenBB Terminal is the result of a strong community building an "
-        "[param]investment research platform for everyone.[/param]\n\n"
-        "Join us on [cmds]https://openbb.co/discord[/cmds], "
-        "show your appreciation on [cmds]https://twitter.com/openbb_finance[/cmds],\n"
-        "ask support on [cmds]https://openbb.co/support[/cmds], "
-        "or even request a feature on [cmds]https://openbb.co/request-a-feature[/cmds]\n"
+        "[param]The OpenBB Terminal is the result of a strong community building an "
+        "investment research platform for everyone, anywhere.[/param]\n"
     )
 
     console.print(
-        "[bold]Fill in our 2-minute survey so we better understand how we can improve the terminal "
+        "We are always eager to welcome new contributors and you can find our open jobs here:\n"
+        "[cmds]https://www.openbb.co/company/careers#open-roles[/cmds]\n"
+    )
+
+    console.print(
+        "Join us           : [cmds]https://openbb.co/discord[/cmds]\n"
+        "Follow us         : [cmds]https://twitter.com/openbb_finance[/cmds]\n"
+        "Ask support       : [cmds]https://openbb.co/support[/cmds]\n"
+        "Request a feature : [cmds]https://openbb.co/request-a-feature[/cmds]\n"
+    )
+
+    console.print(
+        "[bold]Fill in our 2-minute survey so we better understand how we can improve the OpenBB Terminal "
         "at [cmds]https://openbb.co/survey[/cmds][/bold]\n"
     )
 
     console.print(
-        "Heard about our[param] discord bot[/param] yet? Check it out here https://openbb.co/products/bot \n"
+        "[param]In the meantime access investment research from your chatting platform using the OpenBB Bot[/param]\n"
+        "Try it today, for FREE: [cmds]https://openbb.co/products/bot[/cmds]\n"
     )
-
     logger.info("END")
 
 
@@ -79,7 +89,7 @@ def update_terminal():
     """Updates the terminal by running git pull in the directory.
     Runs poetry install if needed.
     """
-    if not WITH_GIT or obbff.LOGGING_COMMIT_HASH != "REPLACE_ME":
+    if not WITH_GIT or LOGGING_COMMIT_HASH != "REPLACE_ME":
         console.print("This feature is not available: Git dependencies not installed.")
         return 0
 
@@ -108,46 +118,75 @@ def update_terminal():
 
 
 def open_openbb_documentation(
-    path, url="https://openbb-finance.github.io/OpenBBTerminal/", command=None
+    path, url="https://docs.openbb.co/terminal", command=None, arg_type=""
 ):
     """Opens the documentation page based on your current location within the terminal. Make exceptions for menus
     that are considered 'common' by adjusting the path accordingly."""
-    if "ta" in path:
-        path = "terminal/common/ta/"
-    elif "ba" in path:
-        path = "terminal/common/ba/"
-    elif "qa" in path:
-        path = "terminal/common/qa/"
-    elif "pred" in path:
-        path = "terminal/common/pred/"
-    elif "keys" in path:
-        path = "#accessing-other-sources-of-data-via-api-keys"
+    if path == "/" and command is None:
+        path = "/"
         command = ""
-    elif "settings" in path or "featflags" in path or "sources" in path:
-        path = "#customizing-the-terminal"
+    elif "keys" in path:
+        path = "/guides/basics/keys"
+        command = ""
+    elif "settings" in path:
+        path = "/guides/basics/customizing_the_terminal"
+        command = ""
+    elif "featflags" in path:
+        path = "/guides/basics/customizing_the_terminal"
+        command = ""
+    elif "sources" in path:
+        path = "/guides/advanced/changing_sources"
         command = ""
     else:
-        path = f"terminal/{path}"
+        if arg_type == "command":  # user passed a command name
+            path = f"/reference/{path}"
+        elif arg_type == "menu":  # user passed a menu name
+            if command in ["ta", "ba", "qa"]:
+                menu = path.split("/")[-2]
+                path = f"/guides/intros/common/{menu}"
+            elif command == "forecast":
+                command = ""
+                path = "/guides/intros/forecast"
+            else:
+                path = f"/guides/intros/{path}"
+        else:  # user didn't pass argument and is in a menu
+            menu = path.split("/")[-2]
+            if menu in ["ta", "ba", "qa"]:
+                path = f"/guides/intros/common/{menu}"
+            else:
+                path = f"/guides/intros/{path}"
 
     if command:
-        if command in ["ta", "ba", "qa", "pred"]:
-            path = "terminal/common/"
-        elif "keys" == command:
-            path = "#accessing-other-sources-of-data-via-api-keys"
+        if "keys" == command:
+            path = "/guides/basics/keys"
+            command = ""
+        elif "settings" in path:
+            path = "/guides/basics/customizing_the_terminal"
+            command = ""
+        elif "featflags" in path:
+            path = "/guides/basics/customizing_the_terminal"
+            command = ""
+        elif "sources" in path:
+            path = "/guides/advanced/changing_sources"
             command = ""
         elif "exe" == command:
-            path = "/terminal/scripts/"
+            path = "/quickstart/scripts"
             command = ""
         elif command in ["settings", "featflags", "sources"]:
-            path = "#customizing-the-terminal"
+            path = ""
+            command = ""
+        elif command in ["ta", "ba", "qa"]:
+            path = f"/guides/intros/common/{command}"
             command = ""
 
         path += command
 
     full_url = f"{url}{path}".replace("//", "/")
 
+    if full_url[-1] == "/":
+        full_url = full_url[:-1]
+
     webbrowser.open(full_url)
-    console.print("")
 
 
 def hide_splashscreen():
@@ -168,12 +207,23 @@ def hide_splashscreen():
         logger.info(e)
 
 
+def is_packaged_application() -> bool:
+    """Tell whether or not it is a packaged version (Windows or Mac installer).
+
+
+    Returns:
+        bool: If the application is packaged
+    """
+
+    return LOGGING_APP_NAME == "gst_packaged"
+
+
 def bootup():
     if sys.platform == "win32":
         # Enable VT100 Escape Sequence for WINDOWS 10 Ver. 1607
         os.system("")  # nosec
         # Hide splashscreen loader of the packaged app
-        if obbff.PACKAGED_APPLICATION:
+        if is_packaged_application():
             hide_splashscreen()
 
     try:
@@ -203,20 +253,50 @@ def check_for_updates() -> None:
         r = None
 
     if r is not None and r.status_code == 200:
-        release = r.json()["html_url"].split("/")[-1].replace("v", "")
-        if obbff.VERSION == release:
-            console.print("[green]You are using the latest version[/green]")
+        latest_tag_name = r.json()["tag_name"]
+        latest_version = version.parse(latest_tag_name)
+        current_version = version.parse(obbff.VERSION)
+
+        if check_valid_versions(latest_version, current_version):
+
+            if current_version == latest_version:
+                console.print("[green]You are using the latest stable version[/green]")
+            else:
+                console.print(
+                    "[yellow]You are not using the latest stable version[/yellow]"
+                )
+                if current_version < latest_version:
+                    console.print(
+                        "[yellow]Check for updates at https://openbb.co/products/terminal#get-started[/yellow]"
+                    )
+
+                else:
+                    console.print(
+                        "[yellow]You are using an unreleased version[/yellow]"
+                    )
+
         else:
-            console.print("[red]You are not using the latest version[/red]")
-            console.print(
-                "[yellow]Check for updates at https://openbb.co/products/terminal#get-started[/yellow]"
-            )
+            console.print("[red]You are using an unrecognized version.[/red]")
     else:
         console.print(
             "[yellow]Unable to check for updates... "
             + "Check your internet connection and try again...[/yellow]"
         )
-    console.print("")
+    console.print("\n")
+
+
+def check_valid_versions(
+    latest_version: Union[version.LegacyVersion, version.Version],
+    current_version: Union[version.LegacyVersion, version.Version],
+) -> bool:
+    if (
+        not latest_version
+        or not current_version
+        or not isinstance(latest_version, version.Version)
+        or not isinstance(current_version, version.Version)
+    ):
+        return False
+    return True
 
 
 def welcome_message():
@@ -227,13 +307,12 @@ def welcome_message():
     console.print(f"\nWelcome to OpenBB Terminal v{obbff.VERSION}")
 
     if obbff.ENABLE_THOUGHTS_DAY:
-        console.print("-------------------")
+        console.print("---------------------------------")
         try:
             thought.get_thought_of_the_day()
         except Exception as e:
             logger.exception("Exception: %s", str(e))
             console.print(e)
-    console.print("")
 
 
 def reset(queue: List[str] = None):
@@ -281,7 +360,7 @@ def is_reset(command: str) -> bool:
         The command to test
 
     Returns
-    ----------
+    -------
     answer : bool
         Whether the command is a reset command
     """

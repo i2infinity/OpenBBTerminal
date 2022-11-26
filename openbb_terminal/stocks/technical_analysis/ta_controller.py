@@ -9,9 +9,9 @@ from datetime import datetime
 from typing import List
 
 import pandas as pd
-from prompt_toolkit.completion import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 from openbb_terminal.common.technical_analysis import (
     custom_indicators_view,
     momentum_view,
@@ -34,12 +34,12 @@ from openbb_terminal.helper_funcs import (
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import StockBaseController
 from openbb_terminal.rich_config import console, MenuText
-from openbb_terminal.stocks import stocks_helper
 from openbb_terminal.stocks.technical_analysis import (
     finbrain_view,
     finviz_view,
     tradingview_model,
     tradingview_view,
+    rsp_view,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,7 @@ class TechnicalAnalysisController(StockBaseController):
         "cci",
         "macd",
         "rsi",
+        "rsp",
         "stoch",
         "fisher",
         "cg",
@@ -76,8 +77,11 @@ class TechnicalAnalysisController(StockBaseController):
         "fib",
         "tv",
         "clenow",
+        "demark",
+        "atr",
     ]
     PATH = "/stocks/ta/"
+    CHOICES_GENERATION = True
 
     def __init__(
         self,
@@ -96,12 +100,8 @@ class TechnicalAnalysisController(StockBaseController):
         self.stock = stock
 
         if session and obbff.USE_PROMPT_TOOLKIT:
-            choices: dict = {c: {} for c in self.controller_choices}
-            choices["load"]["-i"] = {c: {} for c in stocks_helper.INTERVALS}
-            choices["load"]["-s"] = {c: {} for c in stocks_helper.SOURCES}
-            choices["recom"]["-i"] = {c: {} for c in tradingview_model.INTERVALS.keys()}
-            choices["recom"]["-s"] = {c: {} for c in tradingview_model.SCREENERS}
-            choices["kc"]["-m"] = {c: {} for c in volatility_model.MAMODES}
+            choices: dict = self.choices_default
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def print_help(self):
@@ -117,10 +117,10 @@ class TechnicalAnalysisController(StockBaseController):
         mt = MenuText("stocks/ta/", 90)
         mt.add_param("_ticker", stock_str)
         mt.add_raw("\n")
-        mt.add_cmd("tv", "TradingView")
-        mt.add_cmd("view", "Finviz")
-        mt.add_cmd("summary", "FinBrain")
-        mt.add_cmd("recom", "TradingView")
+        mt.add_cmd("tv")
+        mt.add_cmd("recom")
+        mt.add_cmd("view")
+        mt.add_cmd("summary")
         mt.add_raw("\n")
         mt.add_info("_overlap_")
         mt.add_cmd("ema")
@@ -133,10 +133,12 @@ class TechnicalAnalysisController(StockBaseController):
         mt.add_cmd("cci")
         mt.add_cmd("macd")
         mt.add_cmd("rsi")
+        mt.add_cmd("rsp")
         mt.add_cmd("stoch")
         mt.add_cmd("fisher")
         mt.add_cmd("cg")
         mt.add_cmd("clenow")
+        mt.add_cmd("demark")
         mt.add_info("_trend_")
         mt.add_cmd("adx")
         mt.add_cmd("aroon")
@@ -144,6 +146,7 @@ class TechnicalAnalysisController(StockBaseController):
         mt.add_cmd("bbands")
         mt.add_cmd("donchian")
         mt.add_cmd("kc")
+        mt.add_cmd("atr")
         mt.add_info("_volume_")
         mt.add_cmd("ad")
         mt.add_cmd("adosc")
@@ -172,7 +175,6 @@ class TechnicalAnalysisController(StockBaseController):
         ns_parser = self.parse_known_args_and_warn(parser, other_args)
         if ns_parser:
             webbrowser.open(f"https://www.tradingview.com/chart/?symbol={self.ticker}")
-            console.print("")
 
     @log_start_end(log=logger)
     def call_view(self, other_args: List[str]):
@@ -315,7 +317,7 @@ class TechnicalAnalysisController(StockBaseController):
             overlap_view.view_ma(
                 ma_type="EMA",
                 symbol=self.ticker,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -367,7 +369,7 @@ class TechnicalAnalysisController(StockBaseController):
             overlap_view.view_ma(
                 ma_type="SMA",
                 symbol=self.ticker,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -416,7 +418,7 @@ class TechnicalAnalysisController(StockBaseController):
             overlap_view.view_ma(
                 ma_type="WMA",
                 symbol=self.ticker,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -465,7 +467,7 @@ class TechnicalAnalysisController(StockBaseController):
             overlap_view.view_ma(
                 ma_type="HMA",
                 symbol=self.ticker,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -517,7 +519,7 @@ class TechnicalAnalysisController(StockBaseController):
             overlap_view.view_ma(
                 ma_type="ZLMA",
                 symbol=self.ticker,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 offset=ns_parser.n_offset,
                 export=ns_parser.export,
@@ -565,22 +567,23 @@ class TechnicalAnalysisController(StockBaseController):
         if ns_parser:
             # Daily
             if self.interval == "1440min":
-                if not ns_parser.start:
+                if ns_parser.start:
+                    interval_text = "Daily"
+                else:
                     console.print(
                         "If no date conditions, VWAP should be used with intraday data. \n"
                     )
                     return
-                interval_text = "Daily"
             else:
                 interval_text = self.interval
 
             overlap_view.view_vwap(
-                symbol=self.ticker,
-                s_interval=interval_text,
                 data=self.stock,
+                symbol=self.ticker,
                 start_date=ns_parser.start,
                 end_date=ns_parser.end,
                 offset=ns_parser.n_offset,
+                interval=interval_text,
                 export=ns_parser.export,
             )
 
@@ -682,7 +685,7 @@ class TechnicalAnalysisController(StockBaseController):
         if ns_parser:
             momentum_view.display_macd(
                 symbol=self.ticker,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 n_fast=ns_parser.n_fast,
                 n_slow=ns_parser.n_slow,
                 n_signal=ns_parser.n_signal,
@@ -742,11 +745,50 @@ class TechnicalAnalysisController(StockBaseController):
         if ns_parser:
             momentum_view.display_rsi(
                 symbol=self.ticker,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 scalar=ns_parser.n_scalar,
                 drift=ns_parser.n_drift,
                 export=ns_parser.export,
+            )
+
+    @log_start_end(log=logger)
+    def call_rsp(self, other_args: List[str]):
+        """Process rsp command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="rsp",
+            description="""
+                IBD Style Relative Strength Percentile Ranking of Stocks (i.e. 0-100 Score).
+                Ranks stocks on the basis of relative strength as calculated by Investor's
+                Business Daily (Yearly performance of stock (most recent quarter is weighted
+                double) divided by yearly performance of reference index (here, we use SPY)
+                Export table to view the entire ranking
+                Data taken from https://github.com/skyte/relative-strength
+            """,
+        )
+
+        parser.add_argument(
+            "-t",
+            "--tickers",
+            action="store_true",
+            default=False,
+            dest="disp_tickers",
+            help="Show other tickers in the industry the stock is part of",
+        )
+
+        ns_parser = self.parse_known_args_and_warn(
+            parser,
+            other_args,
+            EXPORT_BOTH_RAW_DATA_AND_FIGURES,
+        )
+
+        if ns_parser:
+            rsp_view.display_rsp(
+                s_ticker=self.ticker,
+                export=ns_parser.export,
+                tickers_show=ns_parser.disp_tickers,
             )
 
     @log_start_end(log=logger)
@@ -878,7 +920,7 @@ class TechnicalAnalysisController(StockBaseController):
         if ns_parser:
             momentum_view.display_cg(
                 symbol=self.ticker,
-                series=self.stock["Adj Close"],
+                data=self.stock["Adj Close"],
                 window=ns_parser.n_length,
                 export=ns_parser.export,
             )
@@ -1039,6 +1081,8 @@ class TechnicalAnalysisController(StockBaseController):
             "--mamode",
             action="store",
             dest="s_mamode",
+            choices=volatility_model.MAMODES,
+            type=str.lower,
             default="sma",
             help="mamode",
         )
@@ -1114,11 +1158,11 @@ class TechnicalAnalysisController(StockBaseController):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             prog="kc",
             description="""
-                 Keltner Channels are volatility-based bands that are placed
-                 on either side of an asset's price and can aid in determining
-                 the direction of a trend.The Keltner channel uses the average
-                 true range (ATR) or volatility, with breaks above or below the top
-                 and bottom barriers signaling a continuation.
+                Keltner Channels are volatility-based bands that are placed
+                on either side of an asset's price and can aid in determining
+                the direction of a trend.The Keltner channel uses the average
+                true range (ATR) or volatility, with breaks above or below the top
+                and bottom barriers signaling a continuation.
             """,
         )
         parser.add_argument(
@@ -1146,6 +1190,7 @@ class TechnicalAnalysisController(StockBaseController):
             dest="s_mamode",
             default="ema",
             choices=volatility_model.MAMODES,
+            type=str.lower,
             help="mamode",
         )
         parser.add_argument(
@@ -1222,13 +1267,13 @@ class TechnicalAnalysisController(StockBaseController):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             prog="adosc",
             description="""
-                 Accumulation/Distribution Oscillator, also known as the Chaikin Oscillator
-                 is essentially a momentum indicator, but of the Accumulation-Distribution line
-                 rather than merely price. It looks at both the strength of price moves and the
-                 underlying buying and selling pressure during a given time period. The oscillator
-                 reading above zero indicates net buying pressure, while one below zero registers
-                 net selling pressure. Divergence between the indicator and pure price moves are
-                 the most common signals from the indicator, and often flag market turning points.
+                Accumulation/Distribution Oscillator, also known as the Chaikin Oscillator
+                is essentially a momentum indicator, but of the Accumulation-Distribution line
+                rather than merely price. It looks at both the strength of price moves and the
+                underlying buying and selling pressure during a given time period. The oscillator
+                reading above zero indicates net buying pressure, while one below zero registers
+                net selling pressure. Divergence between the indicator and pure price moves are
+                the most common signals from the indicator, and often flag market turning points.
             """,
         )
         parser.add_argument(
@@ -1338,7 +1383,7 @@ class TechnicalAnalysisController(StockBaseController):
             custom_indicators_view.fibonacci_retracement(
                 symbol=self.ticker,
                 data=self.stock,
-                period=ns_parser.period,
+                limit=ns_parser.period,
                 start_date=ns_parser.start,
                 end_date=ns_parser.end,
                 export=ns_parser.export,
@@ -1362,16 +1407,101 @@ class TechnicalAnalysisController(StockBaseController):
             type=check_positive,
         )
 
-        if self.interval != "1440min":
-            console.print(
-                "[red]This regression should be performed with daily data and at least 90 days.[/red]"
-            )
-            return
+        ns_parser = self.parse_known_args_and_warn(
+            parser, other_args, EXPORT_ONLY_FIGURES_ALLOWED
+        )
+        if ns_parser:
+            if self.interval == "1440min":
+                momentum_view.display_clenow_momentum(
+                    self.stock["Adj Close"],
+                    self.ticker.upper(),
+                    ns_parser.period,
+                    ns_parser.export,
+                )
+            else:
+                console.print(
+                    "[red]This regression should be performed with daily data and at least 90 days.[/red]"
+                )
+
+    @log_start_end(log=logger)
+    def call_demark(self, other_args: List[str]):
+        """Process demark command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="demark",
+            description="Calculates the Demark sequential indicator.",
+        )
+        parser.add_argument(
+            "-m",
+            "--min",
+            help="Minimum value of indicator to show (declutters plot).",
+            dest="min_to_show",
+            type=check_positive,
+            default=5,
+        )
 
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, EXPORT_ONLY_FIGURES_ALLOWED
         )
         if ns_parser:
-            momentum_view.display_clenow_momentum(
-                self.stock["Adj Close"], ns_parser.period, ns_parser.export
+            momentum_view.display_demark(
+                self.stock,
+                self.ticker.upper(),
+                min_to_show=ns_parser.min_to_show,
+                export=ns_parser.export,
+            )
+
+    @log_start_end(log=logger)
+    def call_atr(self, other_args: List[str]):
+        """Process atr command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="atr",
+            description="""
+                Averge True Range is used to measure volatility, especially volatility caused by
+                gaps or limit moves.
+            """,
+        )
+        parser.add_argument(
+            "-l",
+            "--length",
+            action="store",
+            dest="n_length",
+            type=check_positive,
+            default=14,
+            help="Window length",
+        )
+        parser.add_argument(
+            "-m",
+            "--mamode",
+            action="store",
+            dest="s_mamode",
+            default="ema",
+            choices=volatility_model.MAMODES,
+            help="mamode",
+        )
+        parser.add_argument(
+            "-o",
+            "--offset",
+            action="store",
+            dest="n_offset",
+            type=int,
+            default=0,
+            help="offset",
+        )
+
+        ns_parser = self.parse_known_args_and_warn(
+            parser, other_args, EXPORT_BOTH_RAW_DATA_AND_FIGURES
+        )
+
+        if ns_parser:
+            volatility_view.display_atr(
+                data=self.stock,
+                symbol=self.ticker,
+                window=ns_parser.n_length,
+                mamode=ns_parser.s_mamode,
+                offset=ns_parser.n_offset,
+                export=ns_parser.export,
             )
